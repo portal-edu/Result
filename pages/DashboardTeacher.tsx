@@ -1,15 +1,16 @@
+
 import React, { useEffect, useState } from 'react';
 import { GlassCard, GlassButton, GlassSelect, GlassInput } from '../components/GlassUI';
 import { api } from '../services/api';
 import { Student, Marks, ClassData, ProfileRequest, SubjectConfig } from '../types';
-import { Save, RefreshCw, Printer, AlertTriangle, Check, X, UserCog, Table, BookOpen, FileText, Settings, Plus, Trash2 } from 'lucide-react';
+import { Save, RefreshCw, Printer, AlertTriangle, Check, X, UserCog, Table, BookOpen, FileText, Settings, Plus, Trash2, UserPlus, KeyRound, LayoutTemplate, SaveAll } from 'lucide-react';
 
 interface Props {
   user: ClassData;
 }
 
 // Pre-defined Subject Templates
-const SUBJECT_TEMPLATES: Record<string, string[]> = {
+const STANDARD_TEMPLATES: Record<string, string[]> = {
     'STATE_10': ['Malayalam-I', 'Malayalam-II', 'English', 'Hindi', 'Physics', 'Chemistry', 'Biology', 'Social Science', 'Maths', 'IT'],
     'CBSE_10': ['English', 'Hindi', 'Maths', 'Science', 'Social Science'],
     'PLUS_TWO_SCI': ['English', 'Second Lang', 'Physics', 'Chemistry', 'Maths', 'Computer Science'],
@@ -18,8 +19,9 @@ const SUBJECT_TEMPLATES: Record<string, string[]> = {
 };
 
 const DashboardTeacher: React.FC<Props> = ({ user }) => {
-  const [activeTab, setActiveTab] = useState<'marks' | 'requests' | 'reports'>('marks');
+  const [activeTab, setActiveTab] = useState<'marks' | 'requests' | 'reports' | 'admissions'>('marks');
   const [students, setStudents] = useState<Student[]>([]);
+  const [pendingAdmissions, setPendingAdmissions] = useState<Student[]>([]);
   const [marks, setMarks] = useState<Record<string, Marks>>({});
   const [requests, setRequests] = useState<ProfileRequest[]>([]);
   const [loading, setLoading] = useState(false);
@@ -30,12 +32,18 @@ const DashboardTeacher: React.FC<Props> = ({ user }) => {
   const [showSubjectSettings, setShowSubjectSettings] = useState(false);
   const [newSubjectName, setNewSubjectName] = useState('');
   const [newSubjectMax, setNewSubjectMax] = useState('100');
+  const [tempSubjects, setTempSubjects] = useState<SubjectConfig[]>([]);
+
+  // Custom Templates State
+  const [customTemplates, setCustomTemplates] = useState<Record<string, SubjectConfig[]>>({});
+  const [newTemplateName, setNewTemplateName] = useState('');
 
   // For Reports
   const [rankList, setRankList] = useState<any[]>([]);
 
   useEffect(() => {
     loadData();
+    loadCustomTemplates();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -46,10 +54,20 @@ const DashboardTeacher: React.FC<Props> = ({ user }) => {
       if (activeTab === 'reports') {
           generateRankList();
       }
+      if (activeTab === 'admissions') {
+          loadAdmissions();
+      }
   }, [activeTab]);
+
+  useEffect(() => {
+      if (showSubjectSettings) {
+          setTempSubjects([...currentSubjects]);
+      }
+  }, [showSubjectSettings, currentSubjects]);
 
   const loadData = async () => {
     setLoading(true);
+    // Fetch only verified students for marks entry
     const stuList = await api.getStudentsByClass(user.id);
     setStudents(stuList);
     
@@ -70,17 +88,63 @@ const DashboardTeacher: React.FC<Props> = ({ user }) => {
     }
     setMarks(marksMap);
     
-    // Check for pending requests count only
+    // Fetch pending counts
     const reqs = await api.getPendingRequestsForClass(user.id);
     setRequests(reqs);
 
+    const admissions = await api.getPendingAdmissions(user.id);
+    setPendingAdmissions(admissions);
+
     setLoading(false);
+  };
+
+  const loadCustomTemplates = () => {
+      const saved = localStorage.getItem('schoolResult_customTemplates');
+      if (saved) {
+          try {
+              setCustomTemplates(JSON.parse(saved));
+          } catch (e) {
+              console.error("Failed to parse custom templates", e);
+          }
+      }
+  };
+
+  const saveCustomTemplate = () => {
+      if (!newTemplateName.trim()) {
+          alert("Please enter a template name");
+          return;
+      }
+      if (tempSubjects.length === 0) {
+          alert("Add subjects before saving template");
+          return;
+      }
+      
+      const updated = { ...customTemplates, [newTemplateName.trim()]: tempSubjects };
+      setCustomTemplates(updated);
+      localStorage.setItem('schoolResult_customTemplates', JSON.stringify(updated));
+      setNewTemplateName('');
+      alert("Template saved locally!");
+  };
+
+  const deleteCustomTemplate = (name: string) => {
+      if(!window.confirm(`Delete template "${name}"?`)) return;
+      const updated = { ...customTemplates };
+      delete updated[name];
+      setCustomTemplates(updated);
+      localStorage.setItem('schoolResult_customTemplates', JSON.stringify(updated));
   };
 
   const loadRequests = async () => {
       setLoading(true);
       const reqs = await api.getPendingRequestsForClass(user.id);
       setRequests(reqs);
+      setLoading(false);
+  };
+
+  const loadAdmissions = async () => {
+      setLoading(true);
+      const data = await api.getPendingAdmissions(user.id);
+      setPendingAdmissions(data);
       setLoading(false);
   };
 
@@ -133,15 +197,40 @@ const DashboardTeacher: React.FC<Props> = ({ user }) => {
       }
   };
 
+  const handleAdmissionAction = async (studentId: string, action: 'APPROVE' | 'REJECT') => {
+      if (action === 'APPROVE') {
+          const res = await api.verifyStudent(studentId);
+          if (res.success) {
+             loadAdmissions();
+             // Reload main data to include new student
+             setTimeout(loadData, 500);
+          } else {
+             alert(res.message);
+          }
+      } else {
+          if(!window.confirm("Reject this admission? The record will be deleted.")) return;
+          const res = await api.rejectAdmission(studentId);
+          if (res.success) loadAdmissions();
+      }
+  };
+
   const applySubjectTemplate = async (templateKey: string) => {
       if (!templateKey) return;
       if (!window.confirm("Changing subjects will reset subject configuration. Continue?")) return;
 
-      const newSubjectsNames = SUBJECT_TEMPLATES[templateKey];
-      if (newSubjectsNames) {
+      let newSubjectsConfig: SubjectConfig[] = [];
+
+      // Check Custom Templates first
+      if (customTemplates[templateKey]) {
+          newSubjectsConfig = customTemplates[templateKey];
+      } 
+      // Check Standard Templates
+      else if (STANDARD_TEMPLATES[templateKey]) {
+          newSubjectsConfig = STANDARD_TEMPLATES[templateKey].map(s => ({ name: s, maxMarks: 100, passMarks: 30 }));
+      }
+
+      if (newSubjectsConfig.length > 0) {
           setLoading(true);
-          const newSubjectsConfig: SubjectConfig[] = newSubjectsNames.map(s => ({ name: s, maxMarks: 100 })); // Default 100
-          
           const res = await api.updateClassSubjects(user.id, newSubjectsConfig);
           if (res.success) {
               setCurrentSubjects(newSubjectsConfig);
@@ -167,42 +256,18 @@ const DashboardTeacher: React.FC<Props> = ({ user }) => {
       }
   };
 
-  const addSubject = () => {
-      if (!newSubjectName) return;
-      const max = parseInt(newSubjectMax) || 100;
-      const newConfig = [...currentSubjects, { name: newSubjectName, maxMarks: max }];
-      saveSubjectConfig(newConfig);
-      setNewSubjectName('');
-      setNewSubjectMax('100');
-  };
-
-  const deleteSubject = (index: number) => {
-      if (!window.confirm("Delete this subject? Existing marks for this subject may be hidden.")) return;
-      const newConfig = [...currentSubjects];
-      newConfig.splice(index, 1);
-      saveSubjectConfig(newConfig);
-  };
-
-  const updateSubjectMax = (index: number, val: string) => {
-      const newConfig = [...currentSubjects];
-      newConfig[index].maxMarks = parseInt(val) || 0;
-      // We don't save immediately, maybe we should? For now let's create a 'Save' button in modal if complex. 
-      // But for simplicity, let's just update local state if we were using a local copy. 
-      // Since we are saving entire array on ADD/DELETE, let's do direct save here for simplicity or UI might be laggy.
-      // Better UX: Have a local state for the modal.
-  };
-  
-  // Actually, let's use a local state for the modal editing to prevent too many API calls
-  const [tempSubjects, setTempSubjects] = useState<SubjectConfig[]>([]);
-
-  useEffect(() => {
-      if (showSubjectSettings) {
-          setTempSubjects([...currentSubjects]);
-      }
-  }, [showSubjectSettings, currentSubjects]);
-
   const saveModalChanges = () => {
       saveSubjectConfig(tempSubjects);
+  };
+
+  const handleResetPassword = async (studentId: string, name: string) => {
+      if (!window.confirm(`Are you sure you want to reset the password for ${name}? It will be reverted to their DOB (YYYY-MM-DD).`)) return;
+      const res = await api.resetStudentPassword(studentId);
+      if (res.success) {
+          alert("Password reset successfully.");
+      } else {
+          alert("Failed: " + res.message);
+      }
   };
 
   const generateRankList = async () => {
@@ -237,7 +302,9 @@ const DashboardTeacher: React.FC<Props> = ({ user }) => {
                       <button onClick={() => setShowSubjectSettings(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"><X className="w-5 h-5"/></button>
                   </div>
                   
-                  <div className="flex-1 overflow-y-auto space-y-3 p-1">
+                  {/* Subject List */}
+                  <div className="flex-1 overflow-y-auto space-y-3 p-1 mb-4">
+                      {tempSubjects.length === 0 && <p className="text-sm text-slate-400 text-center py-4">No subjects added yet.</p>}
                       {tempSubjects.map((sub, idx) => (
                           <div key={idx} className="flex gap-2 items-center bg-slate-50 dark:bg-slate-800 p-2 rounded-lg border border-slate-100 dark:border-slate-700">
                               <div className="flex-1">
@@ -270,7 +337,8 @@ const DashboardTeacher: React.FC<Props> = ({ user }) => {
                       ))}
                   </div>
 
-                  <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 space-y-3">
+                  {/* Add New Subject */}
+                  <div className="space-y-4">
                       <div className="flex gap-2">
                           <GlassInput 
                             placeholder="New Subject Name" 
@@ -287,7 +355,7 @@ const DashboardTeacher: React.FC<Props> = ({ user }) => {
                           />
                           <GlassButton onClick={() => {
                               if(newSubjectName) {
-                                  setTempSubjects([...tempSubjects, { name: newSubjectName, maxMarks: parseInt(newSubjectMax) || 100 }]);
+                                  setTempSubjects([...tempSubjects, { name: newSubjectName, maxMarks: parseInt(newSubjectMax) || 100, passMarks: 30 }]);
                                   setNewSubjectName('');
                                   setNewSubjectMax('100');
                               }
@@ -295,7 +363,41 @@ const DashboardTeacher: React.FC<Props> = ({ user }) => {
                               <Plus className="w-4 h-4"/>
                           </GlassButton>
                       </div>
-                      <GlassButton onClick={saveModalChanges} className="w-full">Save Changes</GlassButton>
+
+                      {/* Template Manager */}
+                      <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg border border-blue-100 dark:border-blue-800">
+                          <h4 className="text-xs font-bold text-blue-800 dark:text-blue-300 mb-2 flex items-center gap-1">
+                              <LayoutTemplate className="w-3 h-3"/> Save as Template
+                          </h4>
+                          <div className="flex gap-2">
+                              <input 
+                                className="flex-1 bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-700 rounded px-2 py-1 text-sm outline-none"
+                                placeholder="Template Name (e.g. My School Custom)"
+                                value={newTemplateName}
+                                onChange={e => setNewTemplateName(e.target.value)}
+                              />
+                              <button 
+                                onClick={saveCustomTemplate}
+                                className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs font-medium flex items-center gap-1"
+                              >
+                                  <SaveAll className="w-3 h-3"/> Save
+                              </button>
+                          </div>
+                          
+                          {/* List Saved Custom Templates */}
+                          {Object.keys(customTemplates).length > 0 && (
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                  {Object.keys(customTemplates).map(tmpl => (
+                                      <span key={tmpl} className="inline-flex items-center gap-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2 py-1 rounded text-xs text-slate-600 dark:text-slate-300">
+                                          {tmpl}
+                                          <button onClick={() => deleteCustomTemplate(tmpl)} className="text-red-400 hover:text-red-600"><X className="w-3 h-3"/></button>
+                                      </span>
+                                  ))}
+                              </div>
+                          )}
+                      </div>
+
+                      <GlassButton onClick={saveModalChanges} className="w-full">Save Changes & Apply</GlassButton>
                   </div>
               </GlassCard>
           </div>
@@ -306,12 +408,16 @@ const DashboardTeacher: React.FC<Props> = ({ user }) => {
              <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Class {user.name} Dashboard</h2>
              <p className="text-slate-500 dark:text-slate-400">Teacher ID: {user.teacherId}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap justify-center">
             <GlassButton onClick={() => setActiveTab('marks')} variant={activeTab === 'marks' ? 'primary' : 'secondary'} className="flex items-center gap-2">
                 <Table className="w-4 h-4"/> Marks
             </GlassButton>
              <GlassButton onClick={() => setActiveTab('reports')} variant={activeTab === 'reports' ? 'primary' : 'secondary'} className="flex items-center gap-2">
                 <FileText className="w-4 h-4"/> Reports
+            </GlassButton>
+            <GlassButton onClick={() => setActiveTab('admissions')} variant={activeTab === 'admissions' ? 'primary' : 'secondary'} className="flex items-center gap-2 relative">
+                <UserPlus className="w-4 h-4"/> Admissions
+                {pendingAdmissions.length > 0 && <span className="absolute -top-1 -right-1 bg-blue-500 text-white text-[10px] w-5 h-5 flex items-center justify-center rounded-full border-2 border-white dark:border-slate-800">{pendingAdmissions.length}</span>}
             </GlassButton>
             <GlassButton onClick={() => setActiveTab('requests')} variant={activeTab === 'requests' ? 'primary' : 'secondary'} className="flex items-center gap-2 relative">
                 <UserCog className="w-4 h-4"/> 
@@ -338,11 +444,18 @@ const DashboardTeacher: React.FC<Props> = ({ user }) => {
                         </label>
                         <GlassSelect onChange={(e) => applySubjectTemplate(e.target.value)}>
                             <option value="">Select Template...</option>
-                            <option value="STATE_10">Kerala State 10th</option>
-                            <option value="CBSE_10">CBSE 10th</option>
-                            <option value="PLUS_TWO_SCI">Plus Two (Science)</option>
-                            <option value="PLUS_TWO_BIO">Plus Two (Bio-Maths)</option>
-                            <option value="LP_UP">LP / UP General</option>
+                            <optgroup label="Custom Templates">
+                                {Object.keys(customTemplates).map(t => (
+                                    <option key={t} value={t}>{t}</option>
+                                ))}
+                            </optgroup>
+                            <optgroup label="Standard Templates">
+                                <option value="STATE_10">Kerala State 10th</option>
+                                <option value="CBSE_10">CBSE 10th</option>
+                                <option value="PLUS_TWO_SCI">Plus Two (Science)</option>
+                                <option value="PLUS_TWO_BIO">Plus Two (Bio-Maths)</option>
+                                <option value="LP_UP">LP / UP General</option>
+                            </optgroup>
                         </GlassSelect>
                     </div>
                     <div className="w-full md:w-1/4 flex gap-2">
@@ -381,10 +494,25 @@ const DashboardTeacher: React.FC<Props> = ({ user }) => {
                             </tr>
                         </thead>
                         <tbody className="text-slate-700 dark:text-slate-300">
-                            {students.map((stu, idx) => (
+                            {students.length === 0 ? (
+                                <tr>
+                                    <td colSpan={4 + currentSubjects.length} className="p-8 text-center text-slate-500">No students found. Check Admissions tab.</td>
+                                </tr>
+                            ) : students.map((stu, idx) => (
                                 <tr key={stu.id} className={`border-b border-slate-100 dark:border-slate-700 hover:bg-blue-50/30 dark:hover:bg-slate-800 transition-colors ${idx % 2 === 0 ? 'bg-white dark:bg-slate-900' : 'bg-slate-50/50 dark:bg-slate-800/50'}`}>
                                     <td className="p-4 sticky left-0 bg-inherit z-10 font-mono text-sm border-r border-slate-100 dark:border-slate-700 font-medium">{stu.regNo}</td>
-                                    <td className="p-4 sticky left-24 bg-inherit z-10 font-medium border-r border-slate-100 dark:border-slate-700 text-slate-900 dark:text-slate-100">{stu.name}</td>
+                                    <td className="p-4 sticky left-24 bg-inherit z-10 font-medium border-r border-slate-100 dark:border-slate-700 text-slate-900 dark:text-slate-100">
+                                        <div className="flex items-center justify-between gap-2">
+                                            <span>{stu.name}</span>
+                                            <button 
+                                                onClick={() => handleResetPassword(stu.id, stu.name)}
+                                                className="text-slate-400 hover:text-blue-500 p-1"
+                                                title="Reset Password to DOB"
+                                            >
+                                                <KeyRound className="w-3.5 h-3.5" />
+                                            </button>
+                                        </div>
+                                    </td>
                                     {currentSubjects.map(sub => {
                                         const currentMark = marks[stu.id]?.subjects[sub.name] || 0;
                                         const isInvalid = currentMark > sub.maxMarks;
@@ -483,6 +611,53 @@ const DashboardTeacher: React.FC<Props> = ({ user }) => {
                       <p>Signature of Class Teacher</p>
                   </div>
               </div>
+          </div>
+      )}
+
+      {/* Admissions Tab */}
+      {activeTab === 'admissions' && (
+          <div className="max-w-4xl mx-auto animate-fade-in-up">
+              <h3 className="font-bold text-xl text-slate-800 dark:text-white mb-4">Pending Admissions</h3>
+              <p className="text-slate-500 dark:text-slate-400 mb-6">Students who registered via the public link. Verify and accept them to the class.</p>
+              
+              {pendingAdmissions.length === 0 ? (
+                  <div className="text-center py-12 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400">
+                      <CheckCircle className="w-12 h-12 mx-auto mb-3 text-green-500 opacity-50"/>
+                      <p>No new admission requests.</p>
+                  </div>
+              ) : (
+                  <div className="space-y-4">
+                      {pendingAdmissions.map(stu => (
+                          <GlassCard key={stu.id} className="flex flex-col md:flex-row justify-between items-center gap-4">
+                              <div className="flex-1">
+                                  <div className="flex items-center gap-3 mb-2">
+                                      <span className="font-bold text-lg text-slate-900 dark:text-white">{stu.name}</span>
+                                      <span className="text-xs bg-blue-100 dark:bg-blue-900 px-2 py-0.5 rounded text-blue-700 dark:text-blue-300 font-mono">Reg: {stu.regNo}</span>
+                                  </div>
+                                  <div className="grid grid-cols-2 gap-x-8 gap-y-1 text-sm text-slate-600 dark:text-slate-400">
+                                      <p>DOB: <span className="text-slate-800 dark:text-slate-200">{stu.dob}</span></p>
+                                      <p>Father: <span className="text-slate-800 dark:text-slate-200">{stu.fatherName}</span></p>
+                                      <p>Mother: <span className="text-slate-800 dark:text-slate-200">{stu.motherName}</span></p>
+                                  </div>
+                              </div>
+                              <div className="flex gap-2">
+                                  <button 
+                                    onClick={() => handleAdmissionAction(stu.id, 'APPROVE')}
+                                    className="bg-green-100 dark:bg-green-900/30 hover:bg-green-200 dark:hover:bg-green-900/50 text-green-700 dark:text-green-400 px-4 py-2 rounded-lg flex items-center gap-2 font-medium transition-colors"
+                                  >
+                                      <Check className="w-4 h-4"/> Accept
+                                  </button>
+                                  <button 
+                                    onClick={() => handleAdmissionAction(stu.id, 'REJECT')}
+                                    className="bg-red-100 dark:bg-red-900/30 hover:bg-red-200 dark:hover:bg-red-900/50 text-red-700 dark:text-red-400 px-4 py-2 rounded-lg flex items-center gap-2 font-medium transition-colors"
+                                  >
+                                      <X className="w-4 h-4"/> Reject
+                                  </button>
+                              </div>
+                          </GlassCard>
+                      ))}
+                  </div>
+              )}
           </div>
       )}
 

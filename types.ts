@@ -1,4 +1,6 @@
+
 export enum Role {
+  SUPER_ADMIN = 'SUPER_ADMIN',
   ADMIN = 'ADMIN',
   TEACHER = 'TEACHER',
   STUDENT = 'STUDENT',
@@ -16,11 +18,13 @@ export interface Student {
   motherName: string;
   photoUrl?: string;
   password?: string; // In real app, hashed
+  isVerified?: boolean;
 }
 
 export interface SubjectConfig {
   name: string;
   maxMarks: number;
+  passMarks: number;
 }
 
 export interface ClassData {
@@ -33,10 +37,10 @@ export interface ClassData {
 
 export interface Marks {
   studentId: string;
-  subjects: Record<string, number>; // { "Maths": 90, "English": 85 }
+  subjects: Record<string, number | string>; // Support numbers or 'AB'
   total: number;
   grade: string;
-  term: 'Term 1' | 'Term 2';
+  term: string;
 }
 
 export interface ProfileRequest {
@@ -51,10 +55,20 @@ export interface ProfileRequest {
   createdAt?: string;
 }
 
+export type PaymentStatus = 'FREE' | 'PENDING' | 'PAID';
+
 export interface SchoolConfig {
+  id?: string;
   schoolName: string;
   sheetUrl: string;
   licenseKey: string;
   isPro: boolean;
   themeColor: string;
+  adminEmail?: string;
+  phone?: string;
+  place?: string;
+  createdAt?: string;
+  expiryDate?: string;
+  paymentStatus?: PaymentStatus;
+  transactionRef?: string;
 }

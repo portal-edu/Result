@@ -1,18 +1,22 @@
+
 import React, { useEffect, useState } from 'react';
 import { GlassCard, GlassButton, GlassInput } from '../components/GlassUI';
 import { api } from '../services/api';
 import { Student, Marks, ProfileRequest } from '../types';
-import { User, Edit2, Clock, CheckCircle, XCircle } from 'lucide-react';
+import { User, Edit2, Clock, CheckCircle, XCircle, Lock } from 'lucide-react';
 
 interface Props {
   user: Student;
 }
 
 const DashboardStudent: React.FC<Props> = ({ user }) => {
-  const [activeTab, setActiveTab] = useState<'profile' | 'result'>('result');
+  const [activeTab, setActiveTab] = useState<'profile' | 'result' | 'security'>('result');
   const [marks, setMarks] = useState<Marks | null>(null);
   const [requests, setRequests] = useState<ProfileRequest[]>([]);
   const [editMode, setEditMode] = useState<{ field: string, value: string } | null>(null);
+  
+  // Password Change State
+  const [newPassword, setNewPassword] = useState('');
 
   useEffect(() => {
     loadData();
@@ -40,6 +44,20 @@ const DashboardStudent: React.FC<Props> = ({ user }) => {
       }
   };
 
+  const handleChangePassword = async () => {
+      if (!newPassword || newPassword.length < 4) {
+          alert("Password too short");
+          return;
+      }
+      const res = await api.changePassword(user.id, newPassword);
+      if (res.success) {
+          alert("Password updated successfully!");
+          setNewPassword('');
+      } else {
+          alert("Failed: " + res.message);
+      }
+  };
+
   const openEdit = (field: string, currentValue: string) => {
       setEditMode({ field, value: currentValue });
   };
@@ -61,6 +79,7 @@ const DashboardStudent: React.FC<Props> = ({ user }) => {
         <div className="flex gap-2">
             <GlassButton variant={activeTab === 'result' ? 'primary' : 'secondary'} onClick={() => setActiveTab('result')}>My Result</GlassButton>
             <GlassButton variant={activeTab === 'profile' ? 'primary' : 'secondary'} onClick={() => setActiveTab('profile')}>My Profile</GlassButton>
+            <GlassButton variant={activeTab === 'security' ? 'primary' : 'secondary'} onClick={() => setActiveTab('security')}>Security</GlassButton>
         </div>
       </div>
 
@@ -169,6 +188,39 @@ const DashboardStudent: React.FC<Props> = ({ user }) => {
                       </div>
                  </GlassCard>
               </div>
+          </div>
+      )}
+
+      {activeTab === 'security' && (
+          <div className="animate-fade-in-up">
+              <GlassCard className="max-w-md mx-auto border-slate-200 dark:border-slate-700">
+                  <div className="flex items-center gap-3 mb-6">
+                      <div className="p-3 bg-blue-50 dark:bg-blue-900/30 rounded-full text-blue-600 dark:text-blue-400">
+                          <Lock className="w-6 h-6"/>
+                      </div>
+                      <h3 className="font-bold text-xl text-slate-800 dark:text-white">Change Password</h3>
+                  </div>
+                  
+                  <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 leading-relaxed">
+                      Set a custom password for your account to enhance security. 
+                      If you forget it, please contact your Class Teacher to reset it back to your DOB.
+                  </p>
+
+                  <div className="space-y-4">
+                      <div>
+                          <label className="text-sm font-medium text-slate-700 dark:text-slate-300 block mb-1">New Password</label>
+                          <GlassInput 
+                              type="password"
+                              placeholder="Min 4 characters"
+                              value={newPassword}
+                              onChange={e => setNewPassword(e.target.value)}
+                          />
+                      </div>
+                      <GlassButton onClick={handleChangePassword} className="w-full">
+                          Update Password
+                      </GlassButton>
+                  </div>
+              </GlassCard>
           </div>
       )}
     </div>

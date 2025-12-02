@@ -11,11 +11,11 @@ const MOCK_CLASSES: ClassData[] = [
     teacherId: 't1', 
     password: '123', 
     subjects: [
-      { name: 'Maths', maxMarks: 100 }, 
-      { name: 'Physics', maxMarks: 100 }, 
-      { name: 'Chemistry', maxMarks: 100 }, 
-      { name: 'English', maxMarks: 100 }, 
-      { name: 'Malayalam', maxMarks: 100 }
+      { name: 'Maths', maxMarks: 100, passMarks: 35 }, 
+      { name: 'Physics', maxMarks: 100, passMarks: 35 }, 
+      { name: 'Chemistry', maxMarks: 100, passMarks: 35 }, 
+      { name: 'English', maxMarks: 100, passMarks: 35 }, 
+      { name: 'Malayalam', maxMarks: 100, passMarks: 35 }
     ] 
   },
   { 
@@ -24,10 +24,10 @@ const MOCK_CLASSES: ClassData[] = [
     teacherId: 't2', 
     password: '123', 
     subjects: [
-      { name: 'Commerce', maxMarks: 100 }, 
-      { name: 'Accountancy', maxMarks: 100 }, 
-      { name: 'English', maxMarks: 100 }, 
-      { name: 'Economics', maxMarks: 100 }
+      { name: 'Commerce', maxMarks: 100, passMarks: 35 }, 
+      { name: 'Accountancy', maxMarks: 100, passMarks: 35 }, 
+      { name: 'English', maxMarks: 100, passMarks: 35 }, 
+      { name: 'Economics', maxMarks: 100, passMarks: 35 }
     ] 
   }
 ];

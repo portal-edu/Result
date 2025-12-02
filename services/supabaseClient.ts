@@ -1,13 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
 
 // ------------------------------------------------------------------
-// DEVELOPER CONFIGURATION
+// YOUR SUPABASE KEYS
 // ------------------------------------------------------------------
-// Replace these with YOUR own Supabase project details.
-// Since this is a client-side app, these keys are visible in the browser network tab.
-// Ensure you have enabled Row Level Security (RLS) in Supabase to protect data.
+// Supabase Dashboard -> Project Settings -> API ൽ നിന്ന് ലഭിക്കുന്നത് ഇവിടെ നൽകുക.
+
 const DEFAULT_URL = 'https://eannpgaknjctmcrhhnqw.supabase.co'; 
 const DEFAULT_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVhbm5wZ2FrbmpjdG1jcmhobnF3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ2NTk4MjYsImV4cCI6MjA4MDIzNTgyNn0.zPI39Lr7vAgfs9J6FEC8SiQ1fyWdE9bvnVb674dpbeE'; 
+
 // ------------------------------------------------------------------
 
 const getUrl = () => localStorage.getItem('sb_url') || DEFAULT_URL;
@@ -20,7 +20,7 @@ export const getSupabaseConfig = () => ({
     key: getKey()
 });
 
-// Helper to check if we are connected (always true in this mode)
+// Helper to check if we are connected
 export const isSupabaseConfigured = () => true;
 
 // No longer needed, but kept for compatibility
