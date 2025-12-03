@@ -1,10 +1,11 @@
 
+
 import React, { useState, useEffect } from 'react';
 import { GlassCard, GlassButton, GlassInput, GlassSelect } from '../components/GlassUI';
 import { Role } from '../types';
 import { api } from '../services/api';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { User, Shield, GraduationCap, Building, KeyRound, ArrowLeft, Mail, FileKey } from 'lucide-react';
+import { User, Shield, GraduationCap, Building, KeyRound, ArrowLeft, Mail, FileKey, Search, Lock } from 'lucide-react';
 
 interface Props {
   onLogin: (role: Role, userData: any) => void;
@@ -33,6 +34,12 @@ const Login: React.FC<Props> = ({ onLogin }) => {
   const [isUpdatePasswordFlow, setIsUpdatePasswordFlow] = useState(false);
   const [updatePass, setUpdatePass] = useState('');
 
+  // Find School State
+  const [showFindSchool, setShowFindSchool] = useState(false);
+  const [findSchoolQuery, setFindSchoolQuery] = useState('');
+  const [foundSchools, setFoundSchools] = useState<{id: string, name: string, slug?: string}[]>([]);
+  const [findingSchool, setFindingSchool] = useState(false);
+
   // State for Student Dropdown Login
   const [availableClasses, setAvailableClasses] = useState<{id: string, name: string}[]>([]);
   const [availableStudents, setAvailableStudents] = useState<{id: string, name: string, reg_no: string}[]>([]);
@@ -57,14 +64,48 @@ const Login: React.FC<Props> = ({ onLogin }) => {
       if (location.hash.includes('type=recovery') || params.get('reset') === 'true') {
           setIsUpdatePasswordFlow(true);
       }
+
+      // Check for Magic Link param (?s=SLUG_OR_ID)
+      const slugOrId = params.get('s');
+      if (slugOrId) {
+          resolveSchool(slugOrId);
+      } else {
+          // If no school ID is set in localStorage, show Find School Screen
+          if (!localStorage.getItem('school_id')) {
+              setShowFindSchool(true);
+          }
+      }
+
   }, [location]);
+
+  // Enforce School Selection for Students and Teachers
+  useEffect(() => {
+      const hasSchool = !!localStorage.getItem('school_id');
+      // If no school is selected, and user tries to switch to Student or Teacher, force Find School
+      if (!hasSchool && (role === Role.STUDENT || role === Role.TEACHER)) {
+          setShowFindSchool(true);
+      }
+  }, [role]);
 
   // Load Classes when Student Role is active
   useEffect(() => {
-      if (role === Role.STUDENT) {
+      if (role === Role.STUDENT && !showFindSchool) {
           loadClassesForLogin();
       }
-  }, [role]);
+  }, [role, showFindSchool]);
+
+  const resolveSchool = async (identifier: string) => {
+      setLoading(true);
+      const school = await api.getSchoolByIdOrSlug(identifier);
+      setLoading(false);
+      if (school) {
+          localStorage.setItem('school_id', school.id);
+          setShowFindSchool(false);
+      } else {
+          // Invalid slug/id
+          setShowFindSchool(true);
+      }
+  };
 
   const loadClassesForLogin = async () => {
       setLoadingResources(true);
@@ -84,6 +125,21 @@ const Login: React.FC<Props> = ({ onLogin }) => {
           setAvailableStudents(students);
           setLoadingResources(false);
       }
+  };
+
+  const handleFindSchool = async (e: React.FormEvent) => {
+      e.preventDefault();
+      setFindingSchool(true);
+      const results = await api.findSchoolByEmailOrName(findSchoolQuery);
+      setFoundSchools(results);
+      setFindingSchool(false);
+  };
+
+  const selectSchool = (schoolId: string) => {
+      localStorage.setItem('school_id', schoolId);
+      setShowFindSchool(false);
+      setRole(Role.STUDENT);
+      loadClassesForLogin();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -211,6 +267,74 @@ const Login: React.FC<Props> = ({ onLogin }) => {
       );
   }
 
+  // FLOW: Find School
+  if (showFindSchool) {
+      return (
+          <div className="flex items-center justify-center py-12 px-4">
+              <GlassCard className="w-full max-w-md shadow-lg border-slate-200 dark:border-slate-700">
+                  <div className="text-center mb-6">
+                      <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+                          <Building className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                      </div>
+                      <h2 className="text-xl font-bold text-slate-900 dark:text-white">Find Your School</h2>
+                      <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">
+                          Enter your <b>School Name</b>, <b>Short Code</b>, or Admin Email.
+                      </p>
+                  </div>
+                  
+                  <form onSubmit={handleFindSchool} className="space-y-4">
+                      <GlassInput 
+                          placeholder="e.g. Oxford Public School or ghss-tvm"
+                          value={findSchoolQuery}
+                          onChange={e => setFindSchoolQuery(e.target.value)}
+                          autoFocus
+                      />
+                      <GlassButton type="submit" className="w-full flex items-center justify-center gap-2" disabled={findingSchool}>
+                          {findingSchool ? 'Searching...' : <><Search className="w-4 h-4"/> Search School</>}
+                      </GlassButton>
+                  </form>
+
+                  {foundSchools.length > 0 && (
+                      <div className="mt-4 space-y-2 max-h-48 overflow-y-auto">
+                          <p className="text-xs font-semibold text-slate-500 uppercase">Search Results:</p>
+                          {foundSchools.map(s => (
+                              <div 
+                                key={s.id} 
+                                onClick={() => selectSchool(s.id)}
+                                className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                              >
+                                  <p className="font-bold text-slate-800 dark:text-white text-sm">{s.name}</p>
+                                  {s.slug && <span className="text-xs bg-slate-200 dark:bg-slate-700 px-1 rounded text-slate-600 dark:text-slate-300">Code: {s.slug}</span>}
+                              </div>
+                          ))}
+                      </div>
+                  )}
+
+                  {foundSchools.length === 0 && !findingSchool && findSchoolQuery && (
+                      <p className="text-center text-sm text-slate-400 mt-4">No schools found.</p>
+                  )}
+
+                  {/* Direct Admin Login */}
+                  <div className="mt-8 pt-6 border-t border-slate-100 dark:border-slate-700 text-center">
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
+                          Are you the School Admin?
+                      </p>
+                      <GlassButton 
+                          variant="secondary"
+                          onClick={() => {
+                              setShowFindSchool(false);
+                              setRole(Role.ADMIN);
+                          }}
+                          className="w-full flex items-center justify-center gap-2"
+                      >
+                          <Lock className="w-4 h-4" /> Login as Admin
+                      </GlassButton>
+                  </div>
+              </GlassCard>
+          </div>
+      );
+  }
+
   // FLOW: Forgot Password Modal
   if (showForgot) {
       return (
@@ -302,7 +426,18 @@ const Login: React.FC<Props> = ({ onLogin }) => {
   return (
     <div className="flex items-center justify-center py-12 px-4">
       <GlassCard className="w-full max-w-md shadow-lg border-slate-200 dark:border-slate-700">
-        <div className="text-center mb-8">
+        <div className="text-center mb-8 relative">
+            {localStorage.getItem('school_id') && (
+                <button 
+                    onClick={() => {
+                        localStorage.removeItem('school_id');
+                        setShowFindSchool(true);
+                    }}
+                    className="absolute right-0 top-0 text-xs text-blue-600 hover:underline"
+                >
+                    Switch School
+                </button>
+            )}
             <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Portal Login</h2>
             <p className="text-slate-500 dark:text-slate-400 text-sm">Access your school dashboard</p>
         </div>

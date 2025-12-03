@@ -1,9 +1,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { GlassCard, GlassButton, GlassInput } from '../components/GlassUI';
-import { Building2, CheckCircle, ArrowRight, Loader2, Copy, ShieldCheck } from 'lucide-react';
+import { Building2, CheckCircle, ArrowRight, Loader2, Copy, ShieldCheck, ExternalLink } from 'lucide-react';
 import { api } from '../services/api';
 import { useNavigate } from 'react-router-dom';
+import { getSupabaseConfig } from '../services/supabaseClient';
 
 const SetupWizard: React.FC = () => {
   const navigate = useNavigate();
@@ -11,6 +12,7 @@ const SetupWizard: React.FC = () => {
   const [error, setError] = useState('');
   const [recoveryCode, setRecoveryCode] = useState('');
   const [isCopied, setIsCopied] = useState(false);
+  const [successData, setSuccessData] = useState<{ schoolId: string, name: string } | null>(null);
 
   const [formData, setFormData] = useState({
       schoolName: '',
@@ -39,7 +41,6 @@ const SetupWizard: React.FC = () => {
           return;
       }
 
-      // Basic Email Validation regex
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       const cleanEmail = formData.email.trim();
       
@@ -60,11 +61,10 @@ const SetupWizard: React.FC = () => {
       );
       
       setLoading(false);
-      if (res.success) {
-          // Pass the email to the login page for better UX
-          navigate('/login', { state: { email: cleanEmail, role: 'ADMIN' } });
+      if (res.success && res.schoolId) {
+          setSuccessData({ schoolId: res.schoolId, name: formData.schoolName });
       } else {
-          setError("Registration Failed: " + res.message);
+          setError("Registration Failed: " + (res.message || "Unknown error"));
       }
   };
 
@@ -72,6 +72,54 @@ const SetupWizard: React.FC = () => {
       navigator.clipboard.writeText(recoveryCode);
       alert("Code Copied! Save it somewhere safe.");
   };
+
+  const handleEnterPortal = () => {
+      if (!successData) return;
+      
+      const { url, key } = getSupabaseConfig();
+      if (url && key) {
+          // Fix for Preview Error:
+          // Instead of forcing a window.location.href reload (which causes 404 in some SPA/Preview envs),
+          // we directly set the credentials in localStorage and navigate internally.
+          localStorage.setItem('sb_url', url);
+          localStorage.setItem('sb_key', key);
+          localStorage.setItem('school_id', successData.schoolId);
+          
+          // Navigate directly to login
+          navigate('/login');
+      } else {
+          navigate('/login');
+      }
+  };
+
+  if (successData) {
+      return (
+          <div className="flex items-center justify-center min-h-[80vh] p-4">
+              <GlassCard className="max-w-lg w-full text-center py-12 px-6 border-green-200 dark:border-green-900 shadow-2xl animate-fade-in-up">
+                  <div className="w-20 h-20 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-6">
+                      <CheckCircle className="w-10 h-10 text-green-600 dark:text-green-400" />
+                  </div>
+                  <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">Registration Successful!</h2>
+                  <p className="text-lg text-slate-600 dark:text-slate-300 mb-8">
+                      Welcome to <b>{successData.name}</b>
+                  </p>
+                  
+                  <div className="bg-blue-50 dark:bg-blue-900/20 p-6 rounded-xl border border-blue-100 dark:border-blue-800 mb-8">
+                      <h3 className="font-bold text-blue-900 dark:text-blue-300 mb-2">What happens next?</h3>
+                      <p className="text-sm text-blue-800/80 dark:text-blue-300/80">
+                          Click below to enter your dedicated School Portal. 
+                          Your unique link will be generated automatically.
+                          <b>Bookmark it</b> when you land on the login page!
+                      </p>
+                  </div>
+
+                  <GlassButton onClick={handleEnterPortal} className="w-full text-lg py-4 shadow-xl shadow-blue-200 dark:shadow-none">
+                      Enter My School Portal <ArrowRight className="w-5 h-5 ml-2" />
+                  </GlassButton>
+              </GlassCard>
+          </div>
+      );
+  }
 
   return (
     <div className="flex items-center justify-center p-4 py-12">
@@ -87,8 +135,8 @@ const SetupWizard: React.FC = () => {
         </div>
         
         {error && (
-            <div className="mb-6 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-3 rounded-lg text-sm border border-red-100 dark:border-red-800 text-center">
-                {error}
+            <div className="mb-6 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-3 rounded-lg text-sm border border-red-100 dark:border-red-800 text-center flex items-center justify-center gap-2">
+                <span className="font-bold">Error:</span> {error}
             </div>
         )}
 
@@ -192,13 +240,8 @@ const SetupWizard: React.FC = () => {
                 </div>
             </div>
 
-            <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg text-sm text-blue-800 dark:text-blue-300 flex gap-2 items-start">
-                <CheckCircle className="w-5 h-5 shrink-0 text-blue-600 dark:text-blue-400" />
-                <p>You will get a Free Tier license automatically. Upgrade to Pro anytime.</p>
-            </div>
-
             <GlassButton type="submit" className="w-full" disabled={loading}>
-                {loading ? <span className="flex items-center justify-center gap-2"><Loader2 className="animate-spin w-4 h-4"/> Registering...</span> : 'Register & Login'}
+                {loading ? <span className="flex items-center justify-center gap-2"><Loader2 className="animate-spin w-4 h-4"/> Registering...</span> : 'Register School'}
             </GlassButton>
         </form>
 

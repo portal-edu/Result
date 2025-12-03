@@ -1,16 +1,19 @@
 
+
 import React, { useEffect, useState } from 'react';
 import { GlassCard, GlassButton, GlassInput, GlassSelect } from '../components/GlassUI';
 import { api } from '../services/api';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { UserPlus, School, CheckCircle, AlertTriangle } from 'lucide-react';
+import { UserPlus, School, CheckCircle, AlertTriangle, Loader2 } from 'lucide-react';
 
 const PublicRegistration: React.FC = () => {
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
     const schoolId = searchParams.get('schoolId');
+    const token = searchParams.get('token');
     
     const [schoolName, setSchoolName] = useState('');
+    const [resolvedSchoolId, setResolvedSchoolId] = useState('');
     const [classes, setClasses] = useState<{id: string, name: string}[]>([]);
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
@@ -26,19 +29,37 @@ const PublicRegistration: React.FC = () => {
     });
 
     useEffect(() => {
-        if (!schoolId) {
+        if (!schoolId && !token) {
             setLoading(false);
             return;
         }
         loadSchoolData();
-    }, [schoolId]);
+    }, [schoolId, token]);
 
     const loadSchoolData = async () => {
-        if (!schoolId) return;
-        const school = await api.getSchoolDetailsPublic(schoolId);
+        let idToUse = schoolId;
+        
+        // If token is present, try to resolve it first (Token takes precedence for revocation logic)
+        if (token) {
+            const school = await api.getSchoolByAdmissionToken(token);
+            if (school) {
+                idToUse = school.id;
+            } else {
+                setLoading(false);
+                return; // Invalid token
+            }
+        }
+
+        if (!idToUse) {
+            setLoading(false);
+            return;
+        }
+
+        const school = await api.getSchoolDetailsPublic(idToUse);
         if (school) {
+            setResolvedSchoolId(idToUse);
             setSchoolName(school.name);
-            const classList = await api.getClassesForPublic(schoolId);
+            const classList = await api.getClassesForPublic(idToUse);
             setClasses(classList);
         }
         setLoading(false);
@@ -46,10 +67,10 @@ const PublicRegistration: React.FC = () => {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!schoolId) return;
+        if (!resolvedSchoolId) return;
         
         setSubmitting(true);
-        const res = await api.publicRegisterStudent(schoolId, formData.classId, formData);
+        const res = await api.publicRegisterStudent(resolvedSchoolId, formData.classId, formData);
         setSubmitting(false);
 
         if (res.success) {
@@ -59,18 +80,25 @@ const PublicRegistration: React.FC = () => {
         }
     };
 
-    if (!schoolId) {
+    if (!loading && !resolvedSchoolId) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-4">
                 <AlertTriangle className="w-12 h-12 text-yellow-500 mb-4"/>
-                <h2 className="text-xl font-bold text-slate-800 dark:text-white">Invalid Link</h2>
-                <p className="text-slate-500 dark:text-slate-400">Please use the registration link provided by your school admin.</p>
+                <h2 className="text-xl font-bold text-slate-800 dark:text-white">Invalid or Expired Link</h2>
+                <p className="text-slate-500 dark:text-slate-400 mt-2">
+                    This registration link is no longer valid.<br/>Please ask your school admin for a new link.
+                </p>
             </div>
         );
     }
 
     if (loading) {
-        return <div className="p-10 text-center">Loading School Details...</div>;
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[60vh]">
+                <Loader2 className="w-8 h-8 animate-spin text-blue-600 mb-2"/>
+                <p className="text-slate-500">Loading School Details...</p>
+            </div>
+        );
     }
 
     if (success) {

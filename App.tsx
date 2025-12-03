@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect } from 'react';
 import { HashRouter, Routes, Route, Navigate, Link } from 'react-router-dom';
 import Landing from './pages/Landing';
@@ -10,6 +11,7 @@ import DashboardStudent from './pages/DashboardStudent';
 import DashboardSuperAdmin from './pages/DashboardSuperAdmin';
 import PublicResult from './pages/PublicResult';
 import PublicRegistration from './pages/PublicRegistration';
+import PortalResolver from './pages/PortalResolver';
 import { LoadingScreen } from './components/GlassUI';
 import { Role } from './types';
 import { GraduationCap, LogOut, Sun, Moon } from 'lucide-react';
@@ -70,12 +72,21 @@ const App: React.FC = () => {
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'light');
 
   useEffect(() => {
-      const params = new URLSearchParams(window.location.search);
-      const configPayload = params.get('cfg');
+      // Improved URL parsing to handle both standard query params and hash-based params
+      const url = window.location.href;
+      
+      // 1. Handle Config (cfg=) - Setup Logic
+      let configPayload = null;
+      if (url.includes('cfg=')) {
+          const match = url.match(/[?&]cfg=([^&#]*)/);
+          if (match) {
+              configPayload = match[1];
+          }
+      }
 
       if (configPayload) {
           try {
-              const decoded = atob(configPayload);
+              const decoded = atob(decodeURIComponent(configPayload));
               const { u, k, s } = JSON.parse(decoded);
               
               if (u && k) {
@@ -83,8 +94,10 @@ const App: React.FC = () => {
                   localStorage.setItem('sb_key', k);
                   if (s) localStorage.setItem('school_id', s);
                   
-                  const newUrl = window.location.origin + window.location.pathname + '#/login';
-                  window.history.replaceState({}, document.title, newUrl);
+                  // Clean up URL
+                  const cleanUrl = window.location.href.replace(/[?&]cfg=[^&#]*/, '');
+                  window.history.replaceState({}, document.title, cleanUrl);
+                  
                   window.location.reload();
                   return;
               }
@@ -93,6 +106,10 @@ const App: React.FC = () => {
           }
       }
 
+      // 2. Handle Slug (s=) - Quick Login Logic
+      // Note: We don't need to reload page for this, it's handled in Login.tsx
+      // But we just check if we are ready
+      
       setTimeout(() => setLoadingApp(false), 1000);
   }, []);
 
@@ -133,6 +150,7 @@ const App: React.FC = () => {
           <Route path="/login" element={<Login onLogin={handleLogin} />} />
           <Route path="/result" element={<PublicResult />} />
           <Route path="/register" element={<PublicRegistration />} />
+          <Route path="/portal/:slug" element={<PortalResolver />} />
           
           <Route path="/dashboard/teacher" element={
               (currentRole === Role.TEACHER && currentUser) 

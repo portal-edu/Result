@@ -34,6 +34,9 @@ const DashboardTeacher: React.FC<Props> = ({ user }) => {
   const [newSubjectMax, setNewSubjectMax] = useState('100');
   const [tempSubjects, setTempSubjects] = useState<SubjectConfig[]>([]);
 
+  // Permissions
+  const [canEditSubjects, setCanEditSubjects] = useState(false);
+
   // Custom Templates State
   const [customTemplates, setCustomTemplates] = useState<Record<string, SubjectConfig[]>>({});
   const [newTemplateName, setNewTemplateName] = useState('');
@@ -67,6 +70,11 @@ const DashboardTeacher: React.FC<Props> = ({ user }) => {
 
   const loadData = async () => {
     setLoading(true);
+    
+    // Check Permissions
+    const cfg = await api.getSchoolConfig();
+    setCanEditSubjects(cfg?.allowTeacherSubjectEdit ?? false);
+
     // Fetch only verified students for marks entry
     const stuList = await api.getStudentsByClass(user.id);
     setStudents(stuList);
@@ -216,6 +224,10 @@ const DashboardTeacher: React.FC<Props> = ({ user }) => {
 
   const applySubjectTemplate = async (templateKey: string) => {
       if (!templateKey) return;
+      if (!canEditSubjects) {
+          alert("Admin has disabled subject editing for teachers.");
+          return;
+      }
       if (!window.confirm("Changing subjects will reset subject configuration. Continue?")) return;
 
       let newSubjectsConfig: SubjectConfig[] = [];
@@ -438,35 +450,45 @@ const DashboardTeacher: React.FC<Props> = ({ user }) => {
                             <option value="Term 2">Term 2</option>
                         </GlassSelect>
                     </div>
-                    <div className="w-full md:w-1/4">
-                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-2">
-                            <BookOpen className="w-3 h-3 text-blue-600 dark:text-blue-400"/> Templates
-                        </label>
-                        <GlassSelect onChange={(e) => applySubjectTemplate(e.target.value)}>
-                            <option value="">Select Template...</option>
-                            <optgroup label="Custom Templates">
-                                {Object.keys(customTemplates).map(t => (
-                                    <option key={t} value={t}>{t}</option>
-                                ))}
-                            </optgroup>
-                            <optgroup label="Standard Templates">
-                                <option value="STATE_10">Kerala State 10th</option>
-                                <option value="CBSE_10">CBSE 10th</option>
-                                <option value="PLUS_TWO_SCI">Plus Two (Science)</option>
-                                <option value="PLUS_TWO_BIO">Plus Two (Bio-Maths)</option>
-                                <option value="LP_UP">LP / UP General</option>
-                            </optgroup>
-                        </GlassSelect>
-                    </div>
-                    <div className="w-full md:w-1/4 flex gap-2">
-                         <GlassButton 
-                            onClick={() => setShowSubjectSettings(true)} 
-                            variant="secondary" 
-                            className="w-full flex items-center justify-center gap-2"
-                        >
-                            <Settings className="w-4 h-4" /> Subjects
-                         </GlassButton>
-                    </div>
+                    
+                    {canEditSubjects ? (
+                        <>
+                            <div className="w-full md:w-1/4">
+                                <label className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-2">
+                                    <BookOpen className="w-3 h-3 text-blue-600 dark:text-blue-400"/> Templates
+                                </label>
+                                <GlassSelect onChange={(e) => applySubjectTemplate(e.target.value)}>
+                                    <option value="">Select Template...</option>
+                                    <optgroup label="Custom Templates">
+                                        {Object.keys(customTemplates).map(t => (
+                                            <option key={t} value={t}>{t}</option>
+                                        ))}
+                                    </optgroup>
+                                    <optgroup label="Standard Templates">
+                                        <option value="STATE_10">Kerala State 10th</option>
+                                        <option value="CBSE_10">CBSE 10th</option>
+                                        <option value="PLUS_TWO_SCI">Plus Two (Science)</option>
+                                        <option value="PLUS_TWO_BIO">Plus Two (Bio-Maths)</option>
+                                        <option value="LP_UP">LP / UP General</option>
+                                    </optgroup>
+                                </GlassSelect>
+                            </div>
+                            <div className="w-full md:w-1/4 flex gap-2">
+                                 <GlassButton 
+                                    onClick={() => setShowSubjectSettings(true)} 
+                                    variant="secondary" 
+                                    className="w-full flex items-center justify-center gap-2"
+                                >
+                                    <Settings className="w-4 h-4" /> Subjects
+                                 </GlassButton>
+                            </div>
+                        </>
+                    ) : (
+                        <div className="w-full md:w-1/2 flex items-center justify-center bg-slate-100 dark:bg-slate-700/50 rounded-lg border border-dashed border-slate-300 dark:border-slate-600 text-xs text-slate-500 dark:text-slate-400">
+                            Subject editing is managed by Admin.
+                        </div>
+                    )}
+
                     <div className="w-full md:w-1/4 flex gap-2 justify-end">
                          <GlassButton onClick={loadData} variant="secondary" title="Reload"><RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /></GlassButton>
                          <GlassButton onClick={handleSaveAll} className="flex items-center gap-2 shadow-lg shadow-blue-200 dark:shadow-none"><Save className="w-4 h-4"/> Save</GlassButton>
@@ -514,8 +536,10 @@ const DashboardTeacher: React.FC<Props> = ({ user }) => {
                                         </div>
                                     </td>
                                     {currentSubjects.map(sub => {
-                                        const currentMark = marks[stu.id]?.subjects[sub.name] || 0;
-                                        const isInvalid = currentMark > sub.maxMarks;
+                                        const val = marks[stu.id]?.subjects[sub.name];
+                                        const currentMark = val !== undefined ? val : 0;
+                                        // Fix: Check type before comparing
+                                        const isInvalid = typeof currentMark === 'number' && currentMark > sub.maxMarks;
                                         
                                         return (
                                             <td key={sub.name} className="p-2 text-center">

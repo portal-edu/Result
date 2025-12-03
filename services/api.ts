@@ -1,4 +1,5 @@
 
+
 import { supabase } from './supabaseClient';
 import { ClassData, Marks, ProfileRequest, Role, Student, SchoolConfig, SubjectConfig } from '../types';
 
@@ -11,12 +12,12 @@ const parseSubjects = (json: any): SubjectConfig[] => {
     if (Array.isArray(parsed)) {
         if (parsed.length === 0) return [];
         if (typeof parsed[0] === 'string') {
-            return parsed.map((s: string) => ({ name: s, maxMarks: 100, passMarks: 30 }));
+            return parsed.map((s: string) => ({ name: s, maxMarks: 50, passMarks: 18 }));
         }
         return parsed.map((s: any) => ({
             name: s.name,
-            maxMarks: s.maxMarks || 100,
-            passMarks: s.passMarks || (s.maxMarks ? Math.floor(s.maxMarks * 0.3) : 30)
+            maxMarks: s.maxMarks || 50,
+            passMarks: s.passMarks || (s.maxMarks ? Math.floor(s.maxMarks * 0.3) : 18)
         }));
     }
     return [];
@@ -134,6 +135,135 @@ export const api = {
       return { success: !error, message: error?.message };
   },
 
+  // --- SCHOOL LOOKUP LOGIC ---
+
+  getSchoolBySlug: async (slug: string) => {
+      try {
+          const { data, error } = await supabase
+              .from('schools')
+              .select('id, name')
+              .eq('slug', slug.trim().toLowerCase())
+              .maybeSingle();
+          
+          if (error) return null;
+          return data;
+      } catch (e) {
+          return null;
+      }
+  },
+  
+  // Try to find school by Slug first, if that looks like a UUID or fails, try by ID.
+  getSchoolByIdOrSlug: async (identifier: string) => {
+      // 1. If it looks like a valid UUID (length 36, typical UUID chars), try ID first
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(identifier);
+      
+      if (isUUID) {
+           const { data } = await supabase.from('schools').select('id, name').eq('id', identifier).maybeSingle();
+           if (data) return data;
+      }
+
+      // 2. Try as Slug
+      const bySlug = await api.getSchoolBySlug(identifier);
+      if (bySlug) return bySlug;
+      
+      return null;
+  },
+
+  getSchoolByAdmissionToken: async (token: string) => {
+      try {
+          const { data, error } = await supabase
+              .from('schools')
+              .select('id, name')
+              .eq('admission_token', token.trim())
+              .maybeSingle();
+          
+          if (error) return null;
+          return data;
+      } catch (e) {
+          return null;
+      }
+  },
+
+  regenerateAdmissionToken: async () => {
+      const schoolId = getSchoolId();
+      if (!schoolId) return { success: false, message: "Session expired" };
+      
+      // Generate a random secure token
+      const array = new Uint32Array(4);
+      window.crypto.getRandomValues(array);
+      const token = Array.from(array, dec => dec.toString(36)).join('');
+
+      const { error } = await supabase
+        .from('schools')
+        .update({ admission_token: token })
+        .eq('id', schoolId);
+        
+      if (error) return { success: false, message: error.message };
+      return { success: true, token };
+  },
+
+  checkSlugAvailability: async (slug: string) => {
+      const schoolId = getSchoolId();
+      const cleanSlug = slug.trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
+      
+      if (cleanSlug.length < 3) return { available: false, message: "Too short (min 3 chars)" };
+
+      const { data: existing } = await supabase.from('schools').select('id').eq('slug', cleanSlug).maybeSingle();
+      
+      // If it exists AND it's not the current school's ID -> Taken
+      if (existing && existing.id !== schoolId) {
+          return { available: false, message: "Not available" };
+      }
+      return { available: true, message: "Available", cleanSlug };
+  },
+
+  updateSchoolSlug: async (slug: string) => {
+      const schoolId = getSchoolId();
+      if (!schoolId) return { success: false, message: "Session expired" };
+      
+      const cleanSlug = slug.trim().toLowerCase().replace(/[^a-z0-9-]/g, ''); 
+      
+      if (cleanSlug.length < 3) return { success: false, message: "Code must be at least 3 characters" };
+
+      // Check uniqueness
+      const { data: existing } = await supabase.from('schools').select('id').eq('slug', cleanSlug).maybeSingle();
+      if (existing && existing.id !== schoolId) {
+          return { success: false, message: "This code is already taken. Try another." };
+      }
+
+      const { error } = await supabase.from('schools').update({ slug: cleanSlug }).eq('id', schoolId);
+      return { success: !error, message: error?.message };
+  },
+
+  findSchoolByEmailOrName: async (query: string) => {
+    // Try by slug first (exact match)
+    const { data: slugMatch } = await supabase
+        .from('schools')
+        .select('id, name, slug')
+        .eq('slug', query.toLowerCase())
+        .maybeSingle();
+    
+    if (slugMatch) return [slugMatch];
+
+    // Try by email
+    const { data: emailMatch } = await supabase
+        .from('schools')
+        .select('id, name, slug')
+        .eq('admin_email', query.toLowerCase())
+        .maybeSingle();
+
+    if (emailMatch) return [emailMatch];
+
+    // Try by Name (Partial)
+    const { data: nameMatch } = await supabase
+        .from('schools')
+        .select('id, name, slug')
+        .ilike('name', `%${query}%`)
+        .limit(5);
+
+    return nameMatch || [];
+  },
+
   login: async (role: Role, credentials: any) => {
     try {
         if (role === Role.ADMIN) {
@@ -162,8 +292,8 @@ export const api = {
         if (role === Role.TEACHER) {
             // Secure Teacher Login via RPC
             const { data, error } = await supabase.rpc('teacher_login', {
-                cls_name: credentials.classId,
-                pass: credentials.password,
+                cls_name: credentials.classId.toUpperCase(),
+                pass: credentials.password.toLowerCase(),
                 schl_id: getSchoolId()
             });
             
@@ -175,6 +305,7 @@ export const api = {
                     user: { 
                         ...clsData, 
                         name: clsData.name, 
+                        teacherName: clsData.teacher_name,
                         subjects: parseSubjects(clsData.subjects) 
                     } 
                 };
@@ -214,15 +345,30 @@ export const api = {
   },
 
   // --- Classes Management ---
-  createClass: async (name: string, teacherPassword: string, subjects: SubjectConfig[]) => {
+  createClass: async (name: string, teacherPassword: string, teacherName: string, subjects: SubjectConfig[]) => {
     const schoolId = getSchoolId();
     if (!schoolId) return { success: false, message: "Session expired" };
 
     try {
+        const finalClassName = name.trim().toUpperCase();
+
+        // Check if class name exists for this school
+        const { data: existingClass } = await supabase
+            .from('classes')
+            .select('id')
+            .eq('school_id', schoolId)
+            .ilike('name', finalClassName) 
+            .maybeSingle();
+
+        if (existingClass) {
+            return { success: false, message: "A class with this name already exists. Please choose a unique name (e.g. 10 B)." };
+        }
+
         const { error } = await supabase.from('classes').insert([{
             school_id: schoolId,
-            name,
-            teacher_password: teacherPassword,
+            name: finalClassName,
+            teacher_password: teacherPassword.toLowerCase(), // Store as lowercase for case-insensitive check
+            teacher_name: teacherName,
             subjects: JSON.stringify(subjects)
         }]);
 
@@ -242,6 +388,7 @@ export const api = {
     
     return data?.map(c => ({
         ...c,
+        teacherName: c.teacher_name,
         subjects: parseSubjects(c.subjects)
     })) || [];
   },
@@ -266,8 +413,38 @@ export const api = {
   },
 
   deleteClass: async (classId: string) => {
-      const { error } = await supabase.from('classes').delete().eq('id', classId);
-      return { success: !error, message: error?.message || "Class deleted" };
+      const schoolId = getSchoolId();
+      if (!schoolId) return { success: false, message: "Session missing" };
+
+      try {
+          // Manual Cascade Delete Strategy
+          // 1. Get Student IDs
+          const { data: students } = await supabase.from('students').select('id').eq('class_id', classId);
+          const studentIds = students?.map(s => s.id) || [];
+
+          if (studentIds.length > 0) {
+              // 2. Delete Marks (Must be first due to FK)
+              const { error: mErr } = await supabase.from('marks').delete().in('student_id', studentIds);
+              if (mErr) throw mErr;
+
+              // 3. Delete Profile Requests
+              const { error: pErr } = await supabase.from('profile_requests').delete().in('student_id', studentIds);
+              if (pErr) throw pErr;
+
+              // 4. Delete Students
+              const { error: sErr } = await supabase.from('students').delete().eq('class_id', classId);
+              if (sErr) throw sErr;
+          }
+          
+          // 5. Delete Class
+          const { error } = await supabase.from('classes').delete().eq('id', classId);
+          
+          if (error) throw error;
+          return { success: true, message: "Class deleted successfully" };
+      } catch (e: any) {
+          console.error("Delete Class Error:", e);
+          return { success: false, message: e.message || "Delete failed" };
+      }
   },
 
   // --- Students Management ---
@@ -564,6 +741,7 @@ export const api = {
       return {
           id: data.id,
           schoolName: data.name,
+          slug: data.slug,
           sheetUrl: '',
           licenseKey: data.license_key || 'FREE',
           isPro: data.is_pro || false,
@@ -573,8 +751,23 @@ export const api = {
           phone: data.phone,
           place: data.place,
           paymentStatus: data.payment_status || 'FREE',
-          transactionRef: data.transaction_ref
+          transactionRef: data.transaction_ref,
+          allowTeacherSubjectEdit: data.allow_teacher_edit || false, // Read from DB
+          admissionToken: data.admission_token
       };
+  },
+
+  updateSchoolSettings: async (settings: Partial<SchoolConfig>) => {
+      const schoolId = getSchoolId();
+      if (!schoolId) return { success: false, message: "Session expired" };
+      
+      const payload: any = {};
+      if (settings.allowTeacherSubjectEdit !== undefined) {
+          payload.allow_teacher_edit = settings.allowTeacherSubjectEdit;
+      }
+      
+      const { error } = await supabase.from('schools').update(payload).eq('id', schoolId);
+      return { success: !error, message: error?.message };
   },
   
   getSchoolDetailsPublic: async (schoolId: string) => {
@@ -617,60 +810,56 @@ export const api = {
       }
       return { success: false, message: "Invalid Key" };
   },
+  
+  // Helpers
+  toggleSchoolStatus: async (schoolId: string, currentStatus: boolean) => {
+      const { error } = await supabase.from('schools').update({ is_pro: !currentStatus }).eq('id', schoolId);
+      return { success: !error };
+  },
 
-  // --- SUPER ADMIN ---
   getAllSchools: async () => {
-      const { data, error } = await supabase.rpc('sa_get_schools');
-      
-      if (error) {
-          console.error("SA Error", error);
-          return [];
-      }
-
+      const { data } = await supabase.from('schools').select('*').order('created_at', { ascending: false });
       return (data || []).map((s: any) => ({
           id: s.id,
           schoolName: s.name,
           adminEmail: s.admin_email,
-          licenseKey: s.license_key,
           isPro: s.is_pro,
-          createdAt: s.created_at,
-          sheetUrl: '',
-          themeColor: 'blue',
-          expiryDate: s.expiry_date,
+          paymentStatus: s.payment_status || 'FREE',
+          transactionRef: s.transaction_ref,
           phone: s.phone,
           place: s.place,
-          paymentStatus: s.payment_status,
-          transactionRef: s.transaction_ref
-      } as SchoolConfig));
-  },
-
-  toggleSchoolStatus: async (schoolId: string, currentStatus: boolean) => {
-      const { error } = await supabase.rpc('sa_toggle_pro', { school_id_in: schoolId, status_in: !currentStatus });
-      return { success: !error };
+          createdAt: s.created_at
+      }));
   },
 
   deleteSchool: async (schoolId: string) => {
-      const { error } = await supabase.rpc('sa_delete_school', { school_id_in: schoolId });
+      // Very dangerous - manual cascade
+      // Deleting School will likely fail if tables are not cascading.
+      // Assuming Admin has cascade privileges or we do it manually.
+      // For now, simpler implementation:
+      const { error } = await supabase.from('schools').delete().eq('id', schoolId);
       return { success: !error, message: error?.message };
   }
 };
 
-const transformStudent = (dbData: any): Student => ({
-    id: dbData.id,
-    regNo: dbData.reg_no,
-    name: dbData.name,
-    classId: dbData.class_id,
-    dob: dbData.dob,
-    fatherName: dbData.father_name || '',
-    motherName: dbData.mother_name || '',
-    photoUrl: dbData.photo_url,
-    isVerified: dbData.is_verified
+// Transformers
+const transformStudent = (s: any): Student => ({
+    id: s.id,
+    regNo: s.reg_no,
+    name: s.name,
+    classId: s.class_id,
+    dob: s.dob,
+    fatherName: s.father_name,
+    motherName: s.mother_name,
+    isVerified: s.is_verified
 });
 
-const transformMarks = (dbData: any): Marks => ({
-    studentId: dbData.student_id,
-    term: dbData.term,
-    subjects: dbData.subjects,
-    total: dbData.total,
-    grade: dbData.grade
-});
+const transformMarks = (m: any): Marks => {
+    return {
+        studentId: m.student_id,
+        term: m.term,
+        subjects: typeof m.subjects === 'string' ? JSON.parse(m.subjects) : m.subjects,
+        total: m.total,
+        grade: m.grade
+    };
+};

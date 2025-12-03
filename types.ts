@@ -1,4 +1,5 @@
 
+
 export enum Role {
   SUPER_ADMIN = 'SUPER_ADMIN',
   ADMIN = 'ADMIN',
@@ -30,7 +31,8 @@ export interface SubjectConfig {
 export interface ClassData {
   id: string;
   name: string;
-  teacherId: string;
+  teacherId: string; // Internal ID or Login ID
+  teacherName?: string; // Display Name
   password?: string;
   subjects: SubjectConfig[];
 }
@@ -60,6 +62,7 @@ export type PaymentStatus = 'FREE' | 'PENDING' | 'PAID';
 export interface SchoolConfig {
   id?: string;
   schoolName: string;
+  slug?: string; // Unique short code for the school
   sheetUrl: string;
   licenseKey: string;
   isPro: boolean;
@@ -71,4 +74,6 @@ export interface SchoolConfig {
   expiryDate?: string;
   paymentStatus?: PaymentStatus;
   transactionRef?: string;
+  allowTeacherSubjectEdit?: boolean;
+  admissionToken?: string; // Secure token for public registration links
 }

@@ -2,8 +2,8 @@ import React from 'react';
 
 // Renaming the "Glass" concept to "Clean" internally, but keeping export names for compatibility.
 
-export const GlassCard: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = '' }) => (
-  <div className={`bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm rounded-xl p-6 transition-colors duration-200 ${className}`}>
+export const GlassCard: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({ children, className = '', ...props }) => (
+  <div className={`bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm rounded-xl p-6 transition-colors duration-200 ${className}`} {...props}>
     {children}
   </div>
 );
