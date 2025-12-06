@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>SchoolResult Pro</title>
     
-    <!-- PWA Setup - IDs added for Dynamic Injection -->
+    <!-- PWA Setup -->
     <link rel="manifest" id="app-manifest" href="./assets/manifest-DdLeIEtG.json">
     <meta name="theme-color" content="#2563eb">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -13,7 +13,7 @@
     <link rel="apple-touch-icon" id="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/2997/2997235.png">
     <link rel="icon" id="app-favicon" type="image/png" href="https://cdn-icons-png.flaticon.com/512/2997/2997235.png">
 
-    <!-- Tailwind CDN is kept for styling -->
+    <!-- Tailwind CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
@@ -28,27 +28,25 @@
       ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.2); border-radius: 4px; }
       ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.3); }
     </style>
-    <!-- REMOVED IMPORTMAP to prevent conflicts with Vite Build -->
 
 <link rel="stylesheet" href="/index.css">
-<script type="importmap">
+  <script type="importmap">
 {
   "imports": {
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.1/",
-    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.555.0",
-    "react-router-dom": "https://aistudiocdn.com/react-router-dom@^7.10.0",
-    "@supabase/supabase-js": "https://aistudiocdn.com/@supabase/supabase-js@^2.86.0",
-    "vite": "https://aistudiocdn.com/vite@^7.2.6",
-    "react/": "https://aistudiocdn.com/react@^19.2.1/",
     "react": "https://aistudiocdn.com/react@^19.2.1",
-    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.1",
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.31.0"
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.1/",
+    "react/": "https://aistudiocdn.com/react@^19.2.1/",
+    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.556.0",
+    "react-router-dom": "https://aistudiocdn.com/react-router-dom@^7.10.1",
+    "@supabase/supabase-js": "https://aistudiocdn.com/@supabase/supabase-js@^2.86.2",
+    "vite": "https://aistudiocdn.com/vite@^7.2.6",
+    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.1"
   }
 }
 </script>
-  <script type="module" crossorigin src="./assets/index-CiIxnk3S.js"></script>
+  <script type="module" crossorigin src="./assets/index-BFktsy2e.js"></script>
 </head>
-  <body>
+  <body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white transition-colors duration-200">
     <div id="root"></div>
-  </body>
+</body>
 </html>
