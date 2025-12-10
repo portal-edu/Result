@@ -2,12 +2,15 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../services/api';
 import { Student, Marks, ProfileRequest, SchoolConfig, AssessmentProgram } from '../types';
-import { Award, BarChart3, User, Bell, CheckCircle, Lock, Crown, Globe, LogOut, Clock } from 'lucide-react';
+import { Award, BarChart3, User, Bell, Crown, Clock, Wallet, Star, Calendar } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import HomeTab from './student_tabs/HomeTab';
 import AnalyticsTab from './student_tabs/AnalyticsTab';
 import ProfileTab from './student_tabs/ProfileTab';
 import ExamsTab from './student_tabs/ExamsTab';
+import StudentFees from './student_tabs/StudentFees';
+import StudentAssessments from './student_tabs/StudentAssessments';
+import StudentAttendance from './student_tabs/StudentAttendance';
 
 interface Props {
   user: Student;
@@ -15,7 +18,7 @@ interface Props {
 
 const DashboardStudent: React.FC<Props> = ({ user }) => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'home' | 'analytics' | 'profile' | 'exams'>('home');
+  const [activeTab, setActiveTab] = useState<'home' | 'analytics' | 'profile' | 'exams' | 'fees' | 'behavior' | 'attendance'>('home');
   const [marks, setMarks] = useState<Marks | null>(null);
   const [assessments, setAssessments] = useState<AssessmentProgram[]>([]);
   const [requests, setRequests] = useState<ProfileRequest[]>([]);
@@ -27,6 +30,12 @@ const DashboardStudent: React.FC<Props> = ({ user }) => {
   const [currentUser, setCurrentUser] = useState(user);
   const [greeting, setGreeting] = useState('Welcome');
 
+  // Check if modules are enabled
+  const [modules, setModules] = useState({ fees: true, assessments: true });
+
+  // THEME STATE
+  const [themeClass, setThemeClass] = useState('bg-blue-600 shadow-blue-600/20');
+
   useEffect(() => {
     setCurrentUser(user);
     loadData();
@@ -36,6 +45,21 @@ const DashboardStudent: React.FC<Props> = ({ user }) => {
     else setGreeting('Good Evening');
   }, [user]);
 
+  // Apply Theme
+  useEffect(() => {
+      // Handle preferences stored in socialLinks hack
+      const prefs = currentUser.socialLinks as any || {}; 
+      const theme = prefs._preferences?.theme || 'DEFAULT';
+      
+      switch(theme) {
+          case 'NEON': setThemeClass('bg-gradient-to-r from-purple-600 to-pink-600 shadow-purple-500/30'); break;
+          case 'GOLD': setThemeClass('bg-gradient-to-r from-yellow-600 to-amber-700 shadow-amber-500/30'); break;
+          case 'DARK_ROYAL': setThemeClass('bg-slate-900 shadow-slate-900/50'); break;
+          case 'MINIMAL': setThemeClass('bg-white border-b border-slate-200 !text-slate-900 shadow-sm'); break;
+          default: setThemeClass(currentUser.isPremium ? 'bg-slate-900 shadow-2xl shadow-yellow-900/20' : 'bg-blue-600 shadow-xl shadow-blue-600/20');
+      }
+  }, [currentUser]);
+
   const loadData = async () => {
     const m = await api.getMarks(user.id, 'Term 1');
     setMarks(m);
@@ -44,6 +68,12 @@ const DashboardStudent: React.FC<Props> = ({ user }) => {
     setRequests(reqs);
     const cfg = await api.getSchoolConfig();
     setSchoolConfig(cfg);
+    
+    const settings = await api.getGlobalSettings();
+    setModules({ 
+        fees: settings['MODULE_FEES'] !== 'FALSE', 
+        assessments: settings['MODULE_ASSESSMENTS'] !== 'FALSE' 
+    });
     
     // Load Assessments targeted for this class
     const allAssessments = await api.getAssessmentPrograms(undefined, user.classId);
@@ -71,37 +101,35 @@ const DashboardStudent: React.FC<Props> = ({ user }) => {
       localStorage.setItem('notif_last_view', Date.now().toString());
   };
 
-  const handleLogout = () => {
-      localStorage.removeItem('school_id'); // Optional: Clear context if needed
-      window.location.reload();
-  };
+  const isMinimal = themeClass.includes('bg-white');
 
   return (
-    <div className={`pb-24 min-h-screen transition-all duration-500 font-sans ${currentUser.isPremium ? 'bg-slate-950 text-white' : 'bg-slate-50 dark:bg-slate-900'}`}>
+    <div className={`pb-24 min-h-screen transition-all duration-500 font-sans ${currentUser.isPremium && !isMinimal ? 'bg-slate-950 text-white' : 'bg-slate-50 dark:bg-slate-900'}`}>
       
       {/* --- HEADER SECTION --- */}
-      <div className={`pt-10 pb-20 px-6 rounded-b-[40px] relative overflow-hidden transition-colors duration-500 ${currentUser.isPremium ? 'bg-slate-900 shadow-2xl shadow-yellow-900/20' : 'bg-blue-600 shadow-xl shadow-blue-600/20'}`}>
-          <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
+      <div className={`pt-10 pb-20 px-6 rounded-b-[40px] relative overflow-hidden transition-all duration-500 shadow-xl ${themeClass}`}>
+          {/* Background Pattern */}
+          {!isMinimal && <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>}
           
           <div className="relative z-10 flex justify-between items-start">
               <div>
-                  <p className="text-white/80 text-xs font-bold mb-1 uppercase tracking-wide opacity-80">{greeting}</p>
-                  <h1 className="text-3xl font-black text-white tracking-tight flex items-center gap-2">
+                  <p className={`${isMinimal ? 'text-slate-500' : 'text-white/80'} text-xs font-bold mb-1 uppercase tracking-wide opacity-80`}>{greeting}</p>
+                  <h1 className={`text-3xl font-black tracking-tight flex items-center gap-2 ${isMinimal ? 'text-slate-900' : 'text-white'}`}>
                       {(currentUser.name || 'Student').split(' ')[0]} 
                       {currentUser.isPremium && <Crown className="w-5 h-5 text-yellow-400 fill-yellow-400 animate-pulse" />}
                   </h1>
-                  <p className="text-white/60 text-xs font-mono mt-1 font-medium bg-black/10 inline-block px-2 py-0.5 rounded">
+                  <p className={`${isMinimal ? 'text-slate-500 bg-slate-100' : 'text-white/60 bg-black/10'} text-xs font-mono mt-1 font-medium inline-block px-2 py-0.5 rounded`}>
                       Reg: {currentUser.regNo}
                   </p>
               </div>
               
               <div className="flex items-center gap-3">
-                  <button onClick={handleOpenNotifications} className="relative p-2.5 bg-white/10 rounded-full hover:bg-white/20 transition-colors backdrop-blur-sm">
-                      <Bell className="w-5 h-5 text-white"/>
+                  <button onClick={handleOpenNotifications} className={`relative p-2.5 rounded-full transition-colors backdrop-blur-sm ${isMinimal ? 'bg-slate-100 hover:bg-slate-200 text-slate-600' : 'bg-white/10 hover:bg-white/20 text-white'}`}>
+                      <Bell className="w-5 h-5"/>
                       {unreadCount > 0 && <div className="absolute top-0 right-0 w-2.5 h-2.5 bg-red-500 border-2 border-transparent rounded-full animate-pulse"></div>}
                   </button>
                   <div className="relative">
-                      <div className={`w-14 h-14 rounded-full border-4 ${currentUser.isPremium ? 'border-yellow-400' : 'border-white/30'} overflow-hidden bg-white shadow-lg`}>
+                      <div className={`w-14 h-14 rounded-full border-4 ${currentUser.isPremium ? 'border-yellow-400' : (isMinimal ? 'border-slate-200' : 'border-white/30')} overflow-hidden bg-white shadow-lg`}>
                           {currentUser.photoUrl ? (
                               <img src={currentUser.photoUrl} className="w-full h-full object-cover" />
                           ) : (
@@ -119,7 +147,10 @@ const DashboardStudent: React.FC<Props> = ({ user }) => {
               {[
                   { id: 'home', label: 'Home', icon: <Award className="w-4 h-4"/> }, 
                   { id: 'exams', label: 'Exams', icon: <Clock className="w-4 h-4"/> }, 
-                  { id: 'analytics', label: 'Analytics', icon: <BarChart3 className="w-4 h-4"/> }, 
+                  { id: 'analytics', label: 'Marks', icon: <BarChart3 className="w-4 h-4"/> },
+                  { id: 'attendance', label: 'Presence', icon: <Calendar className="w-4 h-4"/> },
+                  ...(modules.fees ? [{ id: 'fees', label: 'Fees', icon: <Wallet className="w-4 h-4"/> }] : []),
+                  ...(modules.assessments ? [{ id: 'behavior', label: 'Stars', icon: <Star className="w-4 h-4"/> }] : []),
                   { id: 'profile', label: 'Profile', icon: <User className="w-4 h-4"/> }
               ].map(tab => (
                   <button 
@@ -145,12 +176,10 @@ const DashboardStudent: React.FC<Props> = ({ user }) => {
               />
           )}
           {activeTab === 'exams' && <ExamsTab user={currentUser} />}
-          {activeTab === 'analytics' && (
-              <AnalyticsTab 
-                  marks={marks} 
-                  user={currentUser}
-              />
-          )}
+          {activeTab === 'analytics' && <AnalyticsTab marks={marks} user={currentUser} />}
+          {activeTab === 'attendance' && <StudentAttendance user={currentUser} />}
+          {activeTab === 'fees' && <StudentFees user={currentUser} />}
+          {activeTab === 'behavior' && <StudentAssessments user={currentUser} />}
           {activeTab === 'profile' && (
               <ProfileTab 
                   user={currentUser} 
@@ -166,7 +195,7 @@ const DashboardStudent: React.FC<Props> = ({ user }) => {
               <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-3xl p-6 h-[70vh] flex flex-col">
                   <div className="flex justify-between items-center mb-6">
                       <h3 className="font-bold text-lg dark:text-white flex items-center gap-2"><Bell className="w-5 h-5"/> Notifications</h3>
-                      <button onClick={() => setShowNotifModal(false)} className="text-slate-400 hover:text-slate-600"><LogOut className="w-5 h-5 rotate-180"/></button>
+                      <button onClick={() => setShowNotifModal(false)} className="text-slate-400 hover:text-slate-600">Close</button>
                   </div>
                   <div className="flex-1 overflow-y-auto space-y-3 custom-scrollbar">
                       {notifications.length > 0 ? notifications.map((n, i) => (

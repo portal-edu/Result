@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState, useMemo } from 'react';
 import { api } from '../services/api';
 import { Student, Marks, ClassData, SubjectConfig, SchoolConfig, AssessmentProgram, FeeStructure } from '../types';
@@ -8,6 +9,8 @@ import StudentsTab from './teacher_tabs/StudentsTab';
 import MarksTab from './teacher_tabs/MarksTab';
 import ReportsTab from './teacher_tabs/ReportsTab';
 import SubjectsTab from './teacher_tabs/SubjectsTab';
+import AttendanceTab from './teacher_tabs/AttendanceTab';
+import { calculateGrade } from '../services/utils';
 
 interface Props {
   user: ClassData & { isPro?: boolean };
@@ -15,7 +18,7 @@ interface Props {
 
 const DashboardTeacher: React.FC<Props> = ({ user }) => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'students' | 'subjects' | 'marks' | 'exams' | 'assessments' | 'reports' | 'fees'>('students');
+  const [activeTab, setActiveTab] = useState<'students' | 'subjects' | 'marks' | 'exams' | 'attendance' | 'assessments' | 'reports' | 'fees'>('students');
   const [students, setStudents] = useState<Student[]>([]);
   const [pendingAdmissions, setPendingAdmissions] = useState<Student[]>([]);
   const [marks, setMarks] = useState<Record<string, Marks>>({});
@@ -105,11 +108,15 @@ const DashboardTeacher: React.FC<Props> = ({ user }) => {
       setMarks(prev => {
           const studentMarks = { ...prev[studentId] };
           studentMarks.subjects = { ...studentMarks.subjects, [subject]: finalVal };
+          
+          // Calculate Total
           const total = (Object.values(studentMarks.subjects) as (number | string)[]).reduce((a, b) => {
               const val = typeof b === 'number' ? b : 0;
               return (a as number) + val;
           }, 0) as number;
           studentMarks.total = total;
+          
+          // Logic for Max Total and Fail Check
           let maxTotal = 0;
           let isFail = false;
           Object.keys(studentMarks.subjects).forEach(subName => {
@@ -121,16 +128,13 @@ const DashboardTeacher: React.FC<Props> = ({ user }) => {
                   if (numericMark < subConfig.passMarks) isFail = true;
               }
           });
-          const percentage = maxTotal > 0 ? (total / maxTotal) * 100 : 0;
-          if (percentage >= 90) studentMarks.grade = 'A+';
-          else if (percentage >= 80) studentMarks.grade = 'A';
-          else if (percentage >= 70) studentMarks.grade = 'B+';
-          else if (percentage >= 60) studentMarks.grade = 'B';
-          else if (percentage >= 50) studentMarks.grade = 'C+';
-          else if (percentage >= 40) studentMarks.grade = 'C';
-          else studentMarks.grade = 'D';
-          studentMarks.resultStatus = isFail ? 'FAILED' : 'PASS';
-          if (studentMarks.grade === 'D' || studentMarks.grade === 'F') studentMarks.resultStatus = 'FAILED';
+
+          // Use Centralized Utility
+          const { grade, resultStatus } = calculateGrade(total, maxTotal, isFail);
+          
+          studentMarks.grade = grade;
+          studentMarks.resultStatus = resultStatus;
+
           return { ...prev, [studentId]: studentMarks };
       });
   };
@@ -272,7 +276,7 @@ const DashboardTeacher: React.FC<Props> = ({ user }) => {
       {/* Tabs */}
       <div className="flex justify-between items-center mb-6 overflow-x-auto pb-2">
           <div className="flex bg-slate-200 dark:bg-slate-700 p-1 rounded-lg max-w-full">
-              {['students', 'subjects', 'marks', 'exams', 'assessments', 'reports', 'fees'].filter(t => t !== 'fees' || canManageFees).map(t => (
+              {['students', 'subjects', 'marks', 'attendance', 'exams', 'assessments', 'reports', 'fees'].filter(t => t !== 'fees' || canManageFees).map(t => (
                   <button key={t} onClick={() => setActiveTab(t as any)} className={`px-4 py-2 rounded-md text-sm font-bold capitalize whitespace-nowrap ${activeTab === t ? 'bg-white dark:bg-slate-800 text-blue-600 shadow-sm' : 'text-slate-600 dark:text-slate-300'}`}>{t}</button>
               ))}
           </div>
@@ -320,8 +324,9 @@ const DashboardTeacher: React.FC<Props> = ({ user }) => {
       )}
       
       {activeTab === 'exams' && <ExamsTab classId={user.id} />}
-      {activeTab === 'assessments' && <div className="p-4 text-center">Assessments Module Coming Soon</div>}
-      {activeTab === 'fees' && <div className="p-4 text-center">Fees Module Coming Soon</div>}
+      {activeTab === 'attendance' && <AttendanceTab students={students} classId={user.id} />}
+      {activeTab === 'assessments' && <div className="p-4 text-center">Assessments Module</div>}
+      {activeTab === 'fees' && <div className="p-4 text-center">Fees Module</div>}
 
     </div>
   );

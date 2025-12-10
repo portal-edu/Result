@@ -11,6 +11,9 @@ import * as Admin from './modules/admin';
 import * as SuperAdmin from './modules/superadmin';
 import * as Support from './modules/support';
 import * as EmailService from './emailService'; 
+import * as Crowd from './modules/crowd'; 
+import * as Attendance from './modules/attendance'; 
+import * as Payment from './paymentService'; 
 import { generateRecoveryCode } from './modules/auth';
 
 export const api = {
@@ -26,5 +29,8 @@ export const api = {
     ...Admin,
     ...SuperAdmin,
     ...Support,
+    ...Crowd, 
+    ...Attendance,
+    ...Payment,
     ...EmailService
 };

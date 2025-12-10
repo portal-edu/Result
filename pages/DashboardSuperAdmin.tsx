@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { GlassCard } from '../components/GlassUI';
-import { Activity, Users, LifeBuoy, Settings, Power, BarChart3, LayoutGrid, Database, HardDrive, Shield, Megaphone, School } from 'lucide-react';
+import { Activity, Users, LifeBuoy, Settings, Power, BarChart3, LayoutGrid, Database, HardDrive, Shield, Megaphone, School, Zap, FileText } from 'lucide-react';
 import OverviewTab from './superadmin_tabs/OverviewTab';
 import SupportDeskTab from './superadmin_tabs/SupportDeskTab';
 import SystemControlTab from './superadmin_tabs/SystemControlTab';
@@ -9,11 +9,13 @@ import InfrastructureTab from './superadmin_tabs/InfrastructureTab';
 import StaffTab from './superadmin_tabs/StaffTab';
 import MarketingTab from './superadmin_tabs/MarketingTab';
 import SchoolManagerTab from './superadmin_tabs/SchoolManagerTab';
+import GrowthTab from './superadmin_tabs/GrowthTab';
+import ContentTab from './superadmin_tabs/ContentTab';
 import { useNavigate } from 'react-router-dom';
 
 const DashboardSuperAdmin: React.FC = () => {
     const navigate = useNavigate();
-    const [activeTab, setActiveTab] = useState<'overview' | 'support' | 'control' | 'infra' | 'staff' | 'marketing' | 'schools'>('overview');
+    const [activeTab, setActiveTab] = useState<'overview' | 'support' | 'control' | 'infra' | 'staff' | 'marketing' | 'schools' | 'growth' | 'content'>('overview');
 
     const handleLogout = () => {
         localStorage.clear();
@@ -53,7 +55,9 @@ const DashboardSuperAdmin: React.FC = () => {
                 <div className="w-full md:w-64 bg-slate-900/80 backdrop-blur border-r border-slate-800 p-4 flex flex-col gap-2 overflow-y-auto">
                     <p className="text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1 mt-2 pl-2">Operations</p>
                     <NavItem id="overview" label="Mission Control" icon={LayoutGrid} />
+                    <NavItem id="growth" label="Growth & Viral" icon={Zap} />
                     <NavItem id="schools" label="School Manager" icon={School} />
+                    <NavItem id="content" label="Content Moderation" icon={FileText} />
                     <NavItem id="marketing" label="Marketing" icon={Megaphone} />
                     <NavItem id="staff" label="Staff & Roles" icon={Users} />
                     
@@ -70,7 +74,9 @@ const DashboardSuperAdmin: React.FC = () => {
                     <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-5 pointer-events-none fixed"></div>
                     
                     {activeTab === 'overview' && <OverviewTab />}
+                    {activeTab === 'growth' && <GrowthTab />}
                     {activeTab === 'schools' && <SchoolManagerTab />}
+                    {activeTab === 'content' && <ContentTab />}
                     {activeTab === 'marketing' && <MarketingTab />}
                     {activeTab === 'support' && <SupportDeskTab />}
                     {activeTab === 'control' && <SystemControlTab />}

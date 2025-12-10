@@ -2,10 +2,21 @@
 export enum Role {
   SUPER_ADMIN = 'SUPER_ADMIN',
   ADMIN = 'ADMIN',
+  PRINCIPAL = 'PRINCIPAL', // New Role
   TEACHER = 'TEACHER',
   STUDENT = 'STUDENT',
   PUBLIC = 'PUBLIC',
   GUEST = 'GUEST'
+}
+
+export type ExamType = 'TERM' | 'MODEL' | 'CLASS_TEST' | 'REVISION' | 'OLYMPIAD';
+
+export interface CustomFieldDef {
+    id: string;
+    label: string;
+    type: 'TEXT' | 'NUMBER' | 'DATE' | 'SELECT';
+    options?: string[]; // For SELECT type
+    required: boolean;
 }
 
 export interface Student {
@@ -35,10 +46,17 @@ export interface Student {
   isPremium?: boolean; // If true, student paid ₹10/20
   premiumExpiry?: string;
   
-  // Socials
+  // NEW: Personalization & Custom Data
+  preferences?: {
+      theme?: 'DEFAULT' | 'NEON' | 'GOLD' | 'DARK_ROYAL' | 'MINIMAL';
+      showQuote?: boolean;
+  };
+  
+  // Socials & Dynamic Data
   socialLinks?: {
       instagram?: string;
       linkedin?: string;
+      custom_data?: Record<string, any>; // Stores Aadhar, House Name etc.
   };
   
   // Optional for UI rendering
@@ -61,7 +79,7 @@ export interface ClassData {
   password?: string;
   subjects: SubjectConfig[];
   studentCount?: number;
-  submissionStatus?: 'DRAFT' | 'SUBMITTED';
+  submissionStatus?: 'DRAFT' | 'SUBMITTED' | 'APPROVED'; // Added APPROVED
   
   schoolName?: string;
   schoolPlace?: string;
@@ -81,6 +99,19 @@ export interface Marks {
   resultStatus?: 'PASS' | 'FAILED';
 }
 
+// NEW: Attendance Types
+export interface AttendanceRecord {
+    id?: string;
+    studentId: string;
+    classId: string;
+    date?: string; // YYYY-MM-DD (For Daily Mode)
+    term?: string; // "Term 1" (For Summary Mode)
+    status: 'PRESENT' | 'ABSENT' | 'LATE' | 'HALF_DAY';
+    workingDays?: number; // For Summary Mode
+    presentDays?: number; // For Summary Mode
+    type: 'DAILY' | 'SUMMARY';
+}
+
 export interface ProfileRequest {
   id: string;
   studentId: string;
@@ -98,6 +129,18 @@ export type PaymentStatus = 'FREE' | 'PENDING' | 'PAID';
 export interface AdmissionConfig {
     askPhoto: boolean;
     askBloodGroup: boolean;
+    askRegNo?: boolean; // New: Toggle Admission Number
+    askRollNo?: boolean; // New: Toggle Roll Number
+    customFields?: CustomFieldDef[]; // New: Dynamic Fields
+}
+
+export interface WalletTransaction {
+    id: string;
+    schoolId: string;
+    amount: number;
+    type: 'CREDIT' | 'DEBIT'; // CREDIT = Recharge, DEBIT = Usage
+    description: string; // "Recharge via UPI" or "Term 1 Result Publish (150 Students)"
+    createdAt: string;
 }
 
 export interface SchoolConfig {
@@ -125,8 +168,13 @@ export interface SchoolConfig {
   
   paymentStatus?: PaymentStatus;
   transactionRef?: string;
+  
+  // WALLET SYSTEM
+  walletBalance?: number;
+
   allowTeacherSubjectEdit?: boolean;
-  allowPublicAdmission?: boolean; 
+  allowPublicAdmission?: boolean;
+  allowTeacherDirectPublish?: boolean; // NEW: Allow teachers to publish Class Tests directly
   admissionToken?: string;
   admissionConfig?: AdmissionConfig;
   
@@ -136,8 +184,20 @@ export interface SchoolConfig {
   // Fee Management Config
   feeManagerRole?: 'ADMIN' | 'TEACHER' | 'HYBRID'; // HYBRID means BOTH
 
+  // Principal Config
+  hasPrincipalLogin?: boolean;
+  principalEmail?: string;
+  principalPassword?: string; // Note: In real app, never send password to client. This is for settings edit.
+
+  // ACADEMIC & SYLLABUS
+  syllabusProviderId?: string; // e.g., 'samastha', 'scert'
+  masterSubjects?: string[]; // Global library of subjects for the school
+  hijriAdjustment?: number; // +/- Days
+
   resultPublishDate?: string;
   scheduledPublishDate?: string;
+  lastPublishType?: ExamType; // To track if last publish was Term or Class Test
+  publishType?: ExamType; // Redundant but kept for compatibility
   
   examName?: string;
   lastActiveAt?: string;
@@ -159,7 +219,15 @@ export interface SchoolConfig {
   coverTheme?: string;
   description?: string;
   allowStudentSocials?: boolean;
-  layoutTemplate?: 'STANDARD' | 'MODERN' | 'MINIMAL';
+  layoutTemplate?: 'STANDARD' | 'MODERN' | 'CLASSIC' | 'VIBRANT' | 'DARK';
+  
+  // Social Media Links
+  socials?: {
+      website?: string;
+      instagram?: string;
+      facebook?: string;
+      youtube?: string;
+  };
 
   // Experimental AI Features (Client-Side)
   enableAiRemarks?: boolean;
@@ -178,7 +246,13 @@ export interface SchoolProfile {
   description?: string;
   themeColor?: string;
   isPro?: boolean;
-  layoutTemplate?: 'STANDARD' | 'MODERN' | 'MINIMAL';
+  layoutTemplate?: 'STANDARD' | 'MODERN' | 'CLASSIC' | 'VIBRANT' | 'DARK';
+  socials?: {
+      website?: string;
+      instagram?: string;
+      facebook?: string;
+      youtube?: string;
+  };
   stats: {
     students: number;
     teachers: number;
@@ -214,7 +288,7 @@ export interface FeePayment {
     id: string;
     feeId: string;
     studentId: string;
-    status: 'PAID' | 'PENDING';
+    status: 'PAID' | 'PENDING' | 'PARTIAL';
     paidDate?: string;
     amountPaid?: number;
     collectedBy?: string; // "Admin" or Teacher Name
@@ -295,6 +369,7 @@ export interface Exam {
     schoolId: string;
     classId: string; // One exam per class for simplicity in v1
     title: string;
+    examType?: ExamType; // Added Type
     description?: string;
     startTime: string; // ISO string
     endTime: string; // ISO string
@@ -494,4 +569,87 @@ export interface InfraNode {
     status: 'HEALTHY' | 'DEGRADED' | 'DOWN';
     load: number;
     capacity: number;
+}
+
+// NEW: Syllabus Definition
+export interface SyllabusDefinition {
+    id: string;
+    name: string;
+    description: string;
+    classRanges: string[]; // e.g. ["1", "2", ... "10"]
+    subjects: Record<string, SubjectConfig[]>; // e.g. { "1": [...], "10": [...] }
+}
+
+// TIMETABLE TYPES
+export interface TimetableConfig {
+    workingDays: string[]; // ["MON", "TUE"]
+    dayStartsAt: string; // "09:00"
+    dayEndsAt: string; // "16:00"
+    periodDuration: number; // minutes
+    breaks: { name: string, start: string, end: string }[];
+}
+
+export interface TimetableEntry {
+    id?: string;
+    classId: string;
+    day: string;
+    periodIndex: number;
+    subjectName: string;
+    teacherId: string; // "Teacher Name" or UUID
+}
+
+// NEW: SCHEDULER AI TYPES
+export interface TeacherProfile {
+    id: string;
+    name: string;
+    subjects: string[]; // ["Maths", "Physics"]
+    maxLoad: number; // Max periods per week (e.g. 28)
+}
+
+export interface SubjectLoad {
+    subject: string;
+    count: number; // Periods per week
+    isDouble?: boolean; // For Labs
+    teacherId?: string; // Specific teacher override
+}
+
+export interface TimetableWizardData {
+    type: 'SCHOOL' | 'MADRASSA' | 'TUITION';
+    teachers: TeacherProfile[];
+    workload: Record<string, SubjectLoad[]>; // classId -> loads
+}
+
+// CALENDAR TYPES
+export type EventType = 'ACADEMIC' | 'RELIGIOUS' | 'HOLIDAY' | 'EXAM' | 'ACTIVITY';
+
+export interface CalendarEvent {
+    id: string;
+    title: string;
+    date: string; // YYYY-MM-DD
+    type: EventType;
+    description?: string;
+}
+
+// --- CROWD INTELLIGENCE & GLOBAL BANK ---
+export interface QuestionBankItem {
+    id: string;
+    text: string;
+    options: string[]; // JSON Array
+    correctOptionIndex: number;
+    marks: number;
+    subject: string;
+    topic: string;
+    classLevel: string; // "10", "5", etc.
+    status: 'PENDING' | 'APPROVED' | 'REJECTED';
+    contributedBy: string; // School ID / Name
+    createdAt: string;
+}
+
+export interface CrowdInsight {
+    type: 'HOLIDAY' | 'SYLLABUS' | 'EXAM_TREND' | 'MOON_SIGHTING';
+    message: string;
+    confidence: number; // 0-100%
+    affectedCount: number; // How many schools
+    targetDate?: string;
+    region?: string;
 }

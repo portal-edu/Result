@@ -236,52 +236,51 @@ export const PricingSection: React.FC<{ mktConfig: MarketingConfig | null }> = (
         { 
             id: 'FREE', 
             name: 'Starter', 
-            price: '0', 
-            period: 'Forever',
-            target: 'Tuition Centers',
-            features: mktConfig?.planFeatures?.starter || [
-                "Unlimited Students", 
-                "Smart Data Entry (Public Link)", 
-                "Instant Result Publish",
-                "WhatsApp Viral Result Link",
-                "Data Backup & Export"
+            price: 'Free', 
+            period: 'for first 50 students',
+            target: 'Small Centers',
+            features: [
+                "Up to 50 Students", 
+                "Result Publishing", 
+                "WhatsApp Links",
+                "Basic Reports"
             ],
             cta: "Start Free",
             style: "standard"
         },
         { 
             id: 'SMART', 
-            name: 'Smart Campus', 
-            price: `₹${mktConfig?.smartPlanPrice || '1,999'}`, 
-            orig: `₹${mktConfig?.smartPlanOriginal || '2,999'}`,
-            period: mktConfig?.billingCycle || '/year',
+            name: 'Growth', 
+            price: '₹1', 
+            orig: '',
+            period: 'per student / term',
             target: 'Schools & Madrassas',
-            features: mktConfig?.planFeatures?.smart || [
-                "Everything in Starter", 
-                "Fee Management System", 
-                "Fee Receipts & Reports",
-                "School Branding (Logo)", 
-                "No Ads on Results"
+            features: [
+                "Unlimited Students", 
+                "Pay As You Go", 
+                "Fee Management",
+                "ID Card Generation",
+                "SMS / WhatsApp Alerts"
             ],
-            cta: "Get Smart License",
+            cta: "Create Campus",
             popular: true,
             style: "popular"
         },
         { 
             id: 'PRO', 
             name: 'Institute Pro', 
-            price: `₹${mktConfig?.proPlanPrice || '4,999'}`, 
-            orig: `₹${mktConfig?.proPlanOriginal || '7,999'}`,
-            period: mktConfig?.billingCycle || '/year',
+            price: `₹${mktConfig?.proPlanPrice || '999'}`, 
+            orig: '',
+            period: '/year + credits',
             target: 'Large Institutes',
-            features: mktConfig?.planFeatures?.pro || [
-                "Everything in Smart", 
-                "✨ AI Question Generator", 
-                "📱 White-label Mobile App", 
-                "Behavioral Reports", 
-                "Priority Support"
+            features: [
+                "White-label (Your App)", 
+                "Custom Domain", 
+                "Priority Support",
+                "AI Question Generator",
+                "Advanced Analytics"
             ],
-            cta: "Go Professional",
+            cta: "Contact Sales",
             style: "premium"
         }
     ];
@@ -290,8 +289,8 @@ export const PricingSection: React.FC<{ mktConfig: MarketingConfig | null }> = (
         <section id="pricing" className="py-24 px-4 bg-slate-50 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800">
             <div className="max-w-6xl mx-auto">
                 <div className="text-center mb-16">
-                    <h2 className="text-3xl font-black text-slate-900 dark:text-white mb-4">Simple Pricing</h2>
-                    <p className="text-slate-500 dark:text-slate-400">No hidden fees. Upgrade when you grow.</p>
+                    <h2 className="text-3xl font-black text-slate-900 dark:text-white mb-4">Transparent Pricing</h2>
+                    <p className="text-slate-500 dark:text-slate-400">Start free. Pay only as you grow.</p>
                 </div>
 
                 <div className="grid md:grid-cols-3 gap-8 items-center">
@@ -315,7 +314,7 @@ export const PricingSection: React.FC<{ mktConfig: MarketingConfig | null }> = (
 
                             {plan.popular && (
                                 <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-blue-600 text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider shadow-md">
-                                    Recommended
+                                    Most Popular
                                 </div>
                             )}
                             
@@ -324,11 +323,8 @@ export const PricingSection: React.FC<{ mktConfig: MarketingConfig | null }> = (
                                 <p className={`text-xs ${plan.style === 'premium' ? 'text-slate-400' : 'text-slate-500'} mb-4`}>{plan.target}</p>
                                 <div className="flex items-baseline gap-1">
                                     <span className={`text-4xl font-black ${plan.style === 'premium' ? 'text-white' : 'text-slate-900 dark:text-white'}`}>{plan.price}</span>
-                                    <span className={`text-sm ${plan.style === 'premium' ? 'text-slate-400' : 'text-slate-500'}`}>{plan.period === 'Forever' ? '' : ` ${plan.period}`}</span>
+                                    <span className={`text-sm ${plan.style === 'premium' ? 'text-slate-400' : 'text-slate-500'}`}>{plan.period}</span>
                                 </div>
-                                {plan.orig && (
-                                    <div className="text-xs text-rose-500 font-bold line-through mt-1">{plan.orig}</div>
-                                )}
                             </div>
                             
                             <ul className="space-y-4 mb-8 flex-1 relative z-10">

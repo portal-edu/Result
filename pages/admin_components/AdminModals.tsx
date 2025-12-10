@@ -1,7 +1,10 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { GlassCard, GlassButton, GlassInput, GlassSelect } from '../../components/GlassUI';
 import { X, Megaphone, Rocket, UserPlus, Globe, Share2, Link as LinkIcon, Download, FileSpreadsheet, CheckCircle2 } from 'lucide-react';
+import { parseCSVLine } from '../../services/utils';
+import { api } from '../../services/api';
+import { CustomFieldDef } from '../../types';
 
 export const NoticeModal: React.FC<{
     onClose: () => void;
@@ -83,7 +86,32 @@ export const StudentEntryModal: React.FC<{
     loading: boolean;
     saved: boolean;
     schoolId: string;
-}> = ({ onClose, mode, setMode, classId, setClassId, classes, newStudent, setNewStudent, onSubmit, onCsv, setCsv, loading, saved, schoolId }) => (
+}> = ({ onClose, mode, setMode, classId, setClassId, classes, newStudent, setNewStudent, onSubmit, onCsv, setCsv, loading, saved, schoolId }) => {
+    
+    // Custom Fields Logic
+    const [customFields, setCustomFields] = useState<CustomFieldDef[]>([]);
+    const [customData, setCustomData] = useState<Record<string, any>>({});
+
+    useEffect(() => {
+        const fetchConfig = async () => {
+            const config = await api.getSchoolConfig();
+            if (config && config.admissionConfig?.customFields) {
+                setCustomFields(config.admissionConfig.customFields);
+            }
+        };
+        fetchConfig();
+    }, []);
+
+    // Sync custom data to main state
+    useEffect(() => {
+        setNewStudent((prev: any) => ({ ...prev, customData: customData }));
+    }, [customData]);
+
+    const handleCustomChange = (id: string, val: any) => {
+        setCustomData(prev => ({ ...prev, [id]: val }));
+    };
+
+    return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 p-4 animate-fade-in-up">
         <GlassCard className="max-w-md w-full relative h-[85vh] flex flex-col p-0 overflow-hidden bg-zinc-50 dark:bg-zinc-900">
             <div className="p-6 pb-2 bg-white dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800">
@@ -157,10 +185,37 @@ export const StudentEntryModal: React.FC<{
                             <div><label className="text-[10px] font-bold text-zinc-500 uppercase block mb-1">Gender</label><GlassSelect value={newStudent.gender} onChange={(e:any) => setNewStudent({...newStudent, gender: e.target.value})}><option value="Male">Male</option><option value="Female">Female</option></GlassSelect></div>
                             <div><label className="text-[10px] font-bold text-zinc-500 uppercase block mb-1">DOB</label><GlassInput type="date" value={newStudent.dob} onChange={(e:any) => setNewStudent({...newStudent, dob: e.target.value})}/></div>
                         </div>
+                        
+                        {/* Dynamic Custom Fields */}
+                        {customFields.length > 0 && (
+                            <div className="border-t border-zinc-200 dark:border-zinc-800 pt-3 mt-2">
+                                <p className="text-[10px] font-bold text-zinc-400 uppercase mb-2">Additional Info</p>
+                                <div className="grid grid-cols-2 gap-3">
+                                    {customFields.map(f => (
+                                        <div key={f.id}>
+                                            <label className="text-[10px] font-bold text-zinc-500 uppercase block mb-1">{f.label}</label>
+                                            {f.type === 'SELECT' ? (
+                                                <GlassSelect value={customData[f.id] || ''} onChange={(e:any) => handleCustomChange(f.id, e.target.value)}>
+                                                    <option value="">Select</option>
+                                                    {f.options?.map(o => <option key={o} value={o}>{o}</option>)}
+                                                </GlassSelect>
+                                            ) : (
+                                                <GlassInput 
+                                                    type={f.type === 'NUMBER' ? 'number' : f.type === 'DATE' ? 'date' : 'text'}
+                                                    value={customData[f.id] || ''} 
+                                                    onChange={(e:any) => handleCustomChange(f.id, e.target.value)}
+                                                />
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
                         <GlassButton type="submit" disabled={loading} className="w-full mt-4 bg-slate-900 text-white hover:bg-slate-800">{loading?'Saving...':'Save Student'}</GlassButton>
                     </form>
                 )}
             </div>
         </GlassCard>
     </div>
-);
+)};

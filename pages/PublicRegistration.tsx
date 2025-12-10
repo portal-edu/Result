@@ -4,7 +4,8 @@ import { GlassCard, GlassButton, GlassInput, GlassSelect } from '../components/G
 import { api } from '../services/api';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { UserPlus, School, CheckCircle, AlertTriangle, Loader2, Lock, XCircle, Upload, Download, Home } from 'lucide-react';
-import { formatDate } from '../services/utils';
+import { formatDate, sanitizePhone } from '../services/utils';
+import { CustomFieldDef } from '../types';
 
 const PublicRegistration: React.FC = () => {
     const location = useLocation();
@@ -23,13 +24,15 @@ const PublicRegistration: React.FC = () => {
     
     // Config
     const [config, setConfig] = useState<any>({});
+    const [customFields, setCustomFields] = useState<CustomFieldDef[]>([]);
     
     // Global Lock
     const [globalRegistrationDisabled, setGlobalRegistrationDisabled] = useState(false);
 
-    const [formData, setFormData] = useState({
+    const [formData, setFormData] = useState<any>({
         name: '',
-        regNo: '', // Optional now?
+        regNo: '', 
+        rollNo: '', // Added roll number
         classId: '',
         dob: '',
         gender: '',
@@ -40,7 +43,8 @@ const PublicRegistration: React.FC = () => {
         password: '',
         confirmPassword: '',
         bloodGroup: '',
-        photoUrl: ''
+        photoUrl: '',
+        customData: {} // Container for custom fields
     });
     
     const [photoFile, setPhotoFile] = useState<File | null>(null);
@@ -88,6 +92,9 @@ const PublicRegistration: React.FC = () => {
                 setResolvedSchoolId(school.id); // Ensure we get the correct ID if slug was used
                 setSchoolName(school.name);
                 setConfig(school.admission_config || {});
+                if (school.admission_config?.customFields) {
+                    setCustomFields(school.admission_config.customFields);
+                }
                 const classList = await api.getClassesForPublic(school.id);
                 setClasses(classList);
             }
@@ -100,6 +107,16 @@ const PublicRegistration: React.FC = () => {
         setPhotoFile(e.target.files[0]);
     };
 
+    const handleCustomFieldChange = (fieldId: string, value: any) => {
+        setFormData((prev: any) => ({
+            ...prev,
+            customData: {
+                ...prev.customData,
+                [fieldId]: value
+            }
+        }));
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!resolvedSchoolId) return;
@@ -109,8 +126,10 @@ const PublicRegistration: React.FC = () => {
             return;
         }
         
-        if (formData.phone.length < 10) {
-            alert("Please enter a valid phone number.");
+        // Final sanitization check before submit
+        const cleanPhone = sanitizePhone(formData.phone);
+        if (cleanPhone.length < 10) {
+            alert("Please enter a valid 10-digit phone number.");
             return;
         }
 
@@ -131,7 +150,7 @@ const PublicRegistration: React.FC = () => {
             }
         }
 
-        const res = await api.publicRegisterStudent(resolvedSchoolId, formData.classId, { ...formData, photoUrl: finalPhotoUrl });
+        const res = await api.publicRegisterStudent(resolvedSchoolId, formData.classId, { ...formData, phone: cleanPhone, photoUrl: finalPhotoUrl });
         setSubmitting(false);
 
         if (res.success) {
@@ -225,6 +244,17 @@ const PublicRegistration: React.FC = () => {
                             <p>{formData.address}</p>
                         </div>
                         
+                        {customFields.length > 0 && (
+                            <div className="mb-6 border-t pt-4">
+                                <p className="font-bold mb-2">Additional Info:</p>
+                                <div className="grid grid-cols-2 gap-4">
+                                    {customFields.map(f => (
+                                        <div key={f.id}><span className="font-bold">{f.label}:</span> {formData.customData[f.id] || '-'}</div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                        
                         <div className="mt-12 pt-4 border-t border-black flex justify-between">
                             <span>Date: {new Date().toLocaleDateString()}</span>
                             <span>Signature of Applicant</span>
@@ -287,12 +317,21 @@ const PublicRegistration: React.FC = () => {
                             <GlassInput placeholder="Full Name" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value.toUpperCase()})} required/>
                         </div>
                         
-                        <div>
-                            <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Admission No / Reg No <span className="text-slate-400 font-normal">(If known)</span></label>
-                            <GlassInput placeholder="e.g. 1024" value={formData.regNo} onChange={e => setFormData({...formData, regNo: e.target.value})}/>
-                        </div>
+                        {config.askRegNo && (
+                            <div>
+                                <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Admission No / Reg No <span className="text-slate-400 font-normal">(Optional)</span></label>
+                                <GlassInput placeholder="e.g. 1024" value={formData.regNo} onChange={e => setFormData({...formData, regNo: e.target.value})}/>
+                            </div>
+                        )}
+
+                        {config.askRollNo && (
+                            <div>
+                                <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Roll No <span className="text-slate-400 font-normal">(Optional)</span></label>
+                                <GlassInput type="number" placeholder="e.g. 5" value={formData.rollNo} onChange={e => setFormData({...formData, rollNo: e.target.value})}/>
+                            </div>
+                        )}
                         
-                        <div>
+                        <div className={config.askRegNo && config.askRollNo ? "md:col-span-2" : ""}>
                             <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Select Class <span className="text-red-500">*</span></label>
                             <GlassSelect value={formData.classId} onChange={e => setFormData({...formData, classId: e.target.value})} required>
                                 <option value="">-- Choose Class --</option>
@@ -331,7 +370,7 @@ const PublicRegistration: React.FC = () => {
                                 type="tel" 
                                 placeholder="10-digit number" 
                                 value={formData.phone} 
-                                onChange={e => setFormData({...formData, phone: e.target.value.replace(/\D/g,'')})} 
+                                onChange={e => setFormData({...formData, phone: sanitizePhone(e.target.value)})} 
                                 maxLength={10}
                                 required
                             />
@@ -351,6 +390,37 @@ const PublicRegistration: React.FC = () => {
                         </div>
                     </div>
 
+                    {/* DYNAMIC CUSTOM FIELDS */}
+                    {customFields.length > 0 && (
+                        <div className="grid md:grid-cols-2 gap-4 bg-slate-50 dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800">
+                            {customFields.map(field => (
+                                <div key={field.id} className={field.type === 'TEXT' || field.type === 'SELECT' ? '' : ''}>
+                                    <label className="text-xs font-bold text-slate-500 uppercase block mb-1">
+                                        {field.label} {field.required && <span className="text-red-500">*</span>}
+                                    </label>
+                                    {field.type === 'SELECT' ? (
+                                        <GlassSelect 
+                                            value={formData.customData[field.id] || ''}
+                                            onChange={e => handleCustomFieldChange(field.id, e.target.value)}
+                                            required={field.required}
+                                        >
+                                            <option value="">Select</option>
+                                            {field.options?.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                        </GlassSelect>
+                                    ) : (
+                                        <GlassInput 
+                                            type={field.type === 'NUMBER' ? 'number' : field.type === 'DATE' ? 'date' : 'text'}
+                                            placeholder={field.label}
+                                            value={formData.customData[field.id] || ''}
+                                            onChange={e => handleCustomFieldChange(field.id, e.target.value)}
+                                            required={field.required}
+                                        />
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
                     {/* Security - Password */}
                     <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800">
                         <div className="flex items-center gap-2 mb-4 text-slate-700 dark:text-slate-300 font-bold">
@@ -369,7 +439,7 @@ const PublicRegistration: React.FC = () => {
                         <p className="text-[10px] text-slate-400 mt-2">You will need this password to login to the Student Dashboard later.</p>
                     </div>
 
-                    {/* Optional Config-based Fields */}
+                    {/* Optional Config-based Fields (Legacy) */}
                     {(config.askBloodGroup || config.askPhoto) && (
                         <div className="grid md:grid-cols-2 gap-4 border-t pt-4 border-slate-100 dark:border-slate-700">
                             {config.askBloodGroup && (

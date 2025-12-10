@@ -1,9 +1,9 @@
 
 import { supabase, isSupabaseConfigured } from '../supabaseClient';
 import { ProfileRequest } from '../../types';
-import { getSchoolId, getErrorMsg, transformStudent, transformMarks } from '../utils';
+import { getSchoolId, getErrorMsg, transformStudent, transformMarks, mergeCustomData } from '../utils';
 
-export const createStudent = async (classId: string, student: { regNo: string, rollNo?: string, name: string, dob: string, gender?: string, fatherName: string, motherName: string, photoUrl?: string, addedBy?: string }) => {
+export const createStudent = async (classId: string, student: { regNo: string, rollNo?: string, name: string, dob: string, gender?: string, fatherName: string, motherName: string, photoUrl?: string, addedBy?: string, customData?: any }) => {
     const schoolId = getSchoolId();
     if (!schoolId) return { success: false, message: "Session expired" };
     if (!isSupabaseConfigured()) return { success: true };
@@ -28,6 +28,11 @@ export const createStudent = async (classId: string, student: { regNo: string, r
             const r = parseInt(student.rollNo);
             if (!isNaN(r)) payload.roll_no = r;
         }
+        
+        // Merge Custom Data into social_links if present
+        if (student.customData && Object.keys(student.customData).length > 0) {
+            payload.social_links = mergeCustomData({}, student.customData);
+        }
 
         const { error } = await supabase.from('students').insert([payload]);
         if (error) {
@@ -36,6 +41,43 @@ export const createStudent = async (classId: string, student: { regNo: string, r
         }
         return { success: true };
     } catch (e: any) { return { success: false, message: getErrorMsg(e) }; }
+};
+
+export const updateStudentDetails = async (studentId: string, updates: any) => {
+    if (!isSupabaseConfigured()) return { success: true };
+    
+    // Map camelCase to snake_case for DB
+    const payload: any = {};
+    if (updates.name) payload.name = updates.name.toUpperCase();
+    if (updates.regNo) payload.reg_no = updates.regNo;
+    if (updates.rollNo) payload.roll_no = parseInt(updates.rollNo) || null;
+    if (updates.dob) payload.dob = updates.dob;
+    if (updates.gender) payload.gender = updates.gender;
+    if (updates.fatherName) payload.father_name = updates.fatherName;
+    if (updates.motherName) payload.mother_name = updates.motherName;
+    if (updates.phone) payload.phone = updates.phone;
+    
+    const { error } = await supabase.from('students').update(payload).eq('id', studentId);
+    return { success: !error, message: error ? getErrorMsg(error) : undefined };
+};
+
+// NEW: For Premium Customization
+export const updateStudentPreferences = async (studentId: string, preferences: any) => {
+    if (!isSupabaseConfigured()) return { success: true };
+    
+    // Retrieving current social links first to merge
+    const { data } = await supabase.from('students').select('social_links').eq('id', studentId).single();
+    const current = data?.social_links || {};
+    const updated = { ...current, _preferences: preferences };
+
+    const { error } = await supabase.from('students').update({ social_links: updated }).eq('id', studentId);
+    return { success: !error, message: error ? getErrorMsg(error) : undefined };
+};
+
+export const transferStudentAdmission = async (studentId: string, targetClassId: string) => {
+    if (!isSupabaseConfigured()) return { success: true };
+    const { error } = await supabase.from('students').update({ class_id: targetClassId }).eq('id', studentId);
+    return { success: !error, message: error ? getErrorMsg(error) : undefined };
 };
 
 export const deleteStudent = async (studentId: string) => {
@@ -73,6 +115,11 @@ export const publicRegisterStudent = async (schoolId: string, classId: string, s
     if (studentData.rollNo) {
          const r = parseInt(studentData.rollNo);
          if(!isNaN(r)) payload.roll_no = r;
+    }
+    
+    // Merge Custom Data into social_links
+    if (studentData.customData && Object.keys(studentData.customData).length > 0) {
+        payload.social_links = mergeCustomData({}, studentData.customData);
     }
 
     const { error } = await supabase.from('students').insert([payload]);
@@ -120,6 +167,32 @@ export const checkAdmissionStatus = async (phone: string, credential: string) =>
 
     } catch (e: any) {
         return { found: false, message: getErrorMsg(e) };
+    }
+};
+
+// NEW: Global Search for Login (Smart Search)
+export const findStudentsForLogin = async (schoolId: string, query: string) => {
+    if (!isSupabaseConfigured()) return [];
+    if (query.length < 3) return [];
+
+    try {
+        const { data } = await supabase.from('students')
+            .select('id, reg_no, name, father_name, class_id, classes(name)')
+            .eq('school_id', schoolId)
+            .eq('is_verified', true)
+            .ilike('name', `%${query}%`)
+            .limit(10);
+
+        return (data || []).map((s: any) => ({
+            id: s.id,
+            regNo: s.reg_no,
+            name: s.name,
+            fatherName: s.father_name,
+            className: s.classes?.name
+        }));
+    } catch (e) {
+        console.error("Search error", e);
+        return [];
     }
 };
 
@@ -214,6 +287,29 @@ export const activateStudentPremium = async (studentId: string, txnId: string) =
     }).eq('id', studentId);
 
     return { success: !error, message: error ? getErrorMsg(error) : "Student Premium Unlocked!" };
+};
+
+// --- GLOBAL SEARCH FOR ADMIN ---
+export const searchAllStudents = async (query: string) => {
+    if (!isSupabaseConfigured()) return [];
+    if (!query || query.length < 2) return [];
+    
+    const schoolId = getSchoolId();
+    if (!schoolId) return [];
+
+    const { data } = await supabase.from('students')
+        .select('id, name, reg_no, class_id, classes(name), is_verified')
+        .eq('school_id', schoolId)
+        .or(`name.ilike.%${query}%,reg_no.ilike.%${query}%`)
+        .limit(10);
+        
+    return (data || []).map((s: any) => ({
+        id: s.id,
+        name: s.name,
+        regNo: s.reg_no,
+        className: s.classes?.name || 'Unknown',
+        isVerified: s.is_verified
+    }));
 };
 
 // Profile Requests

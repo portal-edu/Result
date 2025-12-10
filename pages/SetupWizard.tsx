@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { GlassCard } from '../components/GlassUI';
 import { ShieldAlert } from 'lucide-react';
 import { api } from '../services/api';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { getSupabaseConfig } from '../services/supabaseClient';
 
 // Import Steps
@@ -14,6 +14,8 @@ import StepSuccess from './setup_wizard/StepSuccess';
 
 const SetupWizard: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  
   // Load initial state from localStorage if available
   const savedState = JSON.parse(localStorage.getItem('setup_wizard_data') || '{}');
 
@@ -22,6 +24,9 @@ const SetupWizard: React.FC = () => {
   const [error, setError] = useState('');
   const [recoveryCode, setRecoveryCode] = useState('');
   const [hasPrinted, setHasPrinted] = useState(false);
+  
+  // Attribution Tracking
+  const [attribution, setAttribution] = useState({ refId: '', source: '' });
   
   // Form State
   const [orgType, setOrgType] = useState<'SCHOOL' | 'MADRASSA' | 'TUITION'>(savedState.orgType || 'SCHOOL');
@@ -35,12 +40,27 @@ const SetupWizard: React.FC = () => {
       referralCode: ''
   });
 
-  // AUTO SAVE EFFECT
+  // ATTRIBUTION CAPTURE
   useEffect(() => {
+      const params = new URLSearchParams(location.search);
+      const ref = params.get('ref') || '';
+      const src = params.get('source') || '';
+      if (ref || src) {
+          setAttribution({ refId: ref, source: src });
+      }
+  }, [location]);
+
+  // AUTO SAVE EFFECT (SECURED)
+  useEffect(() => {
+      // Create a safe version of formData without sensitive info
+      const safeFormData = { ...formData };
+      delete safeFormData.password;
+      delete safeFormData.confirmPassword;
+
       const dataToSave = {
           step: step === 4 ? 1 : step, // Don't save success state permanently
           orgType,
-          formData
+          formData: safeFormData
       };
       localStorage.setItem('setup_wizard_data', JSON.stringify(dataToSave));
   }, [step, orgType, formData]);
@@ -71,7 +91,8 @@ const SetupWizard: React.FC = () => {
           formData.phone,
           formData.place,
           recoveryCode,
-          formData.referralCode 
+          formData.referralCode,
+          attribution // Pass attribution data
       );
       
       setLoading(false);

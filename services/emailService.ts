@@ -1,4 +1,3 @@
-
 import { supabase } from './supabaseClient';
 
 // CONFIGURATION
@@ -21,13 +20,14 @@ export const sendOwnershipRequest = (currentOwnerEmail: string, schoolName: stri
     const subject = `Ownership Transfer Request: ${schoolName}`;
     const body = `Hello Super Admin,\n\nI am the current admin of ${schoolName} (${currentOwnerEmail}).\n\nI would like to transfer the ownership of this portal to:\n${newOwnerDetails}\n\nPlease verify and process this request.\n\nRegards,\n${currentOwnerEmail}`;
 
-    // Try EmailJS first (If configured)
     if (EMAILJS_SERVICE_ID && EMAILJS_PUBLIC_KEY) {
         // Implementation for EmailJS would go here
+        // import emailjs from '@emailjs/browser';
+        // emailjs.send(...)
         console.log("Sending via EmailJS...");
     }
 
-    // Fallback: Open User's Email Client (Unlimited Free)
+    // Fallback: Open User's Email Client
     window.open(`mailto:niyasedavachal@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
     return { success: true, message: "Email client opened. Please hit Send." };
 };
@@ -36,20 +36,21 @@ export const sendCriticalAlert = (type: 'BUG' | 'SECURITY' | 'BILLING', message:
     const subject = `[${type}] Critical Alert from ${userEmail}`;
     const body = `User: ${userEmail}\n\nMessage:\n${message}`;
     
+    // Attempt background send if possible, else fallback
     window.open(`mailto:support@schoolresultpro.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
 };
 
 export const triggerPasswordReset = async (email: string) => {
-    // 1. Try Supabase Native Reset (Best for Auth)
+    // 1. Try Supabase Native Reset
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: window.location.origin + '/#/login?reset=true',
     });
 
     if (error) {
-        // If Supabase fails (e.g., limit reached), suggest manual contact
+        console.error("Supabase Reset Error:", error.message);
         return { 
             success: false, 
-            message: error.message, 
+            message: "Automated reset failed. Please contact support.", 
             manualAction: true 
         };
     }

@@ -3,55 +3,20 @@ import React from 'react';
 import { GlassCard } from './components/GlassUI';
 
 const SQL_CONTENT = `-- ==============================================================================
--- 🚀 RESULTMATE - ESSENTIAL DATABASE SCRIPT (v2.2)
--- ==============================================================================
--- ⚠️ WARNING: RUNNING THIS WILL WIPE ALL EXISTING DATA.
--- Use this only for the initial setup of your LIVE database.
+-- 🚀 RESULTMATE - PRODUCTION DATABASE SCRIPT (v5.0 - CREDIT ECONOMY)
 -- ==============================================================================
 
 -- 1. EXTENSIONS
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
--- 2. CLEANUP
-DROP TABLE IF EXISTS infrastructure_logs CASCADE;
-DROP TABLE IF EXISTS staff_members CASCADE;
-DROP TABLE IF EXISTS system_feedback CASCADE;
-DROP TABLE IF EXISTS campus_posts CASCADE;
-DROP TABLE IF EXISTS ad_campaigns CASCADE;
-DROP TABLE IF EXISTS affiliates CASCADE;
-DROP TABLE IF EXISTS profile_requests CASCADE;
-DROP TABLE IF EXISTS assessment_logs CASCADE;
-DROP TABLE IF EXISTS assessment_programs CASCADE;
-DROP TABLE IF EXISTS exam_submissions CASCADE;
-DROP TABLE IF EXISTS exams CASCADE;
-DROP TABLE IF EXISTS fee_payments CASCADE;
-DROP TABLE IF EXISTS fee_structures CASCADE;
-DROP TABLE IF EXISTS marks CASCADE;
-DROP TABLE IF EXISTS students CASCADE;
-DROP TABLE IF EXISTS classes CASCADE;
-DROP TABLE IF EXISTS schools CASCADE;
-DROP TABLE IF EXISTS app_config CASCADE;
+-- 2. CORE TABLES & RLS
 
--- 3. GLOBAL CONFIGURATION
-CREATE TABLE app_config (
-    key TEXT PRIMARY KEY,
-    value TEXT NOT NULL
-);
+CREATE TABLE IF NOT EXISTS app_config (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+ALTER TABLE app_config ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Public Read Config" ON app_config FOR SELECT USING (true);
 
-INSERT INTO app_config (key, value) VALUES 
-('ENABLE_ADS', 'TRUE'), 
-('ENABLE_STUDENT_LOGIN', 'TRUE'), 
-('ENABLE_TEACHER_LOGIN', 'TRUE'),
-('ENABLE_PUBLIC_REGISTRATION', 'TRUE'), 
-('MODULE_FEES', 'TRUE'), 
-('MODULE_ASSESSMENTS', 'TRUE'),
-('MAINTENANCE_MODE', 'FALSE');
-
--- 4. CORE TABLES
-
--- SCHOOLS
-CREATE TABLE schools (
+CREATE TABLE IF NOT EXISTS schools (
     id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
     auth_id UUID UNIQUE, 
     name TEXT NOT NULL,
@@ -59,9 +24,6 @@ CREATE TABLE schools (
     admin_email TEXT NOT NULL,
     phone TEXT,
     place TEXT,
-    pincode TEXT,
-    district TEXT,
-    state TEXT,
     logo_url TEXT,
     cover_photo TEXT,
     theme_color TEXT DEFAULT 'blue',
@@ -81,12 +43,36 @@ CREATE TABLE schools (
     enable_ai_remarks BOOLEAN DEFAULT FALSE,
     enable_ai_voice BOOLEAN DEFAULT FALSE,
     enable_ai_prediction BOOLEAN DEFAULT FALSE,
-    recovery_code TEXT, -- Added for secure reset
+    recovery_code TEXT, 
+    has_principal_login BOOLEAN DEFAULT FALSE,
+    principal_email TEXT,
+    principal_password TEXT,
+    principal_invite_token TEXT,
+    wallet_balance NUMERIC DEFAULT 50, -- WELCOME BONUS: 50 Credits Free
+    referred_by_school_id TEXT, 
+    referral_source TEXT, 
+    referral_code TEXT,
+    hijri_adjustment INTEGER DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+ALTER TABLE schools ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Public Read Schools" ON schools FOR SELECT USING (true);
+CREATE POLICY "Admin Update Own School" ON schools FOR UPDATE USING (auth.uid() = auth_id);
 
--- CLASSES
-CREATE TABLE classes (
+CREATE TABLE IF NOT EXISTS credit_transactions (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    school_id UUID REFERENCES schools(id) ON DELETE CASCADE,
+    amount NUMERIC NOT NULL,
+    type TEXT NOT NULL, 
+    description TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+ALTER TABLE credit_transactions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "School View Wallet" ON credit_transactions FOR SELECT USING (
+    school_id IN (SELECT id FROM schools WHERE auth_id = auth.uid())
+);
+
+CREATE TABLE IF NOT EXISTS classes (
     id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
     school_id UUID REFERENCES schools(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
@@ -95,15 +81,20 @@ CREATE TABLE classes (
     teacher_photo TEXT,
     subjects JSONB DEFAULT '[]'::jsonb,
     status TEXT DEFAULT 'DRAFT',
+    wallet_balance NUMERIC DEFAULT 0, -- Teacher's Personal Wallet
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     UNIQUE(school_id, name)
 );
+ALTER TABLE classes ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Public Read Classes" ON classes FOR SELECT USING (true);
+CREATE POLICY "School Admin Manage Classes" ON classes FOR ALL USING (
+    school_id IN (SELECT id FROM schools WHERE auth_id = auth.uid())
+);
 
--- STUDENTS
-CREATE TABLE students (
+CREATE TABLE IF NOT EXISTS students (
     id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
     school_id UUID REFERENCES schools(id) ON DELETE CASCADE,
-    class_id UUID REFERENCES classes(id) ON DELETE CASCADE,
+    class_id UUID REFERENCES classes(id) ON DELETE SET NULL,
     reg_no TEXT NOT NULL,
     roll_no INTEGER,
     name TEXT NOT NULL,
@@ -111,12 +102,9 @@ CREATE TABLE students (
     gender TEXT DEFAULT 'Male',
     father_name TEXT,
     mother_name TEXT,
-    
-    -- New Fields for Smart Admission
     phone TEXT,
     address TEXT,
     blood_group TEXT,
-    
     photo_url TEXT,
     password TEXT,
     is_verified BOOLEAN DEFAULT TRUE,
@@ -127,9 +115,14 @@ CREATE TABLE students (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     UNIQUE(school_id, reg_no)
 );
+ALTER TABLE students ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Public Read Students" ON students FOR SELECT USING (true);
+CREATE POLICY "School Admin Manage Students" ON students FOR ALL USING (
+    school_id IN (SELECT id FROM schools WHERE auth_id = auth.uid())
+);
+CREATE POLICY "Public Insert Student" ON students FOR INSERT WITH CHECK (true);
 
--- MARKS
-CREATE TABLE marks (
+CREATE TABLE IF NOT EXISTS marks (
     id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
     student_id UUID REFERENCES students(id) ON DELETE CASCADE,
     term TEXT NOT NULL,
@@ -139,11 +132,13 @@ CREATE TABLE marks (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     UNIQUE(student_id, term)
 );
+ALTER TABLE marks ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Public Read Marks" ON marks FOR SELECT USING (true);
+CREATE POLICY "Admin Write Marks" ON marks FOR ALL USING (
+    student_id IN (SELECT id FROM students WHERE school_id IN (SELECT id FROM schools WHERE auth_id = auth.uid()))
+);
 
--- 5. MODULES
-
--- FEES
-CREATE TABLE fee_structures (
+CREATE TABLE IF NOT EXISTS fee_structures (
     id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
     school_id UUID REFERENCES schools(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
@@ -153,8 +148,12 @@ CREATE TABLE fee_structures (
     collected_by TEXT DEFAULT 'ADMIN',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+ALTER TABLE fee_structures ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Admin Manage Fees" ON fee_structures FOR ALL USING (
+    school_id IN (SELECT id FROM schools WHERE auth_id = auth.uid())
+);
 
-CREATE TABLE fee_payments (
+CREATE TABLE IF NOT EXISTS fee_payments (
     id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
     fee_id UUID REFERENCES fee_structures(id) ON DELETE CASCADE,
     student_id UUID REFERENCES students(id) ON DELETE CASCADE,
@@ -166,230 +165,63 @@ CREATE TABLE fee_payments (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     UNIQUE(fee_id, student_id)
 );
-
--- EXAMS
-CREATE TABLE exams (
-    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-    school_id UUID REFERENCES schools(id) ON DELETE CASCADE,
-    class_id UUID REFERENCES classes(id) ON DELETE CASCADE,
-    title TEXT NOT NULL,
-    description TEXT,
-    start_time TIMESTAMP WITH TIME ZONE NOT NULL,
-    end_time TIMESTAMP WITH TIME ZONE NOT NULL,
-    duration_minutes INTEGER DEFAULT 30,
-    questions JSONB NOT NULL,
-    settings JSONB DEFAULT '{}'::jsonb,
-    is_published BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+ALTER TABLE fee_payments ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Admin Manage Payments" ON fee_payments FOR ALL USING (
+    student_id IN (SELECT id FROM students WHERE school_id IN (SELECT id FROM schools WHERE auth_id = auth.uid()))
 );
 
-CREATE TABLE exam_submissions (
-    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-    exam_id UUID REFERENCES exams(id) ON DELETE CASCADE,
-    student_id UUID REFERENCES students(id) ON DELETE CASCADE,
-    answers JSONB NOT NULL,
-    score NUMERIC DEFAULT 0,
-    total_marks NUMERIC DEFAULT 0,
-    submitted_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    UNIQUE(exam_id, student_id)
-);
-
--- ASSESSMENTS
-CREATE TABLE assessment_programs (
-    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-    school_id UUID REFERENCES schools(id) ON DELETE CASCADE,
-    name TEXT NOT NULL,
-    type TEXT NOT NULL,
-    frequency TEXT NOT NULL,
-    assignee TEXT NOT NULL,
-    target_class_ids JSONB DEFAULT '[]'::jsonb,
-    questions JSONB NOT NULL,
-    start_date DATE,
-    end_date DATE,
-    schedules JSONB DEFAULT '[]'::jsonb,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
-CREATE TABLE assessment_logs (
-    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-    program_id UUID REFERENCES assessment_programs(id) ON DELETE CASCADE,
-    student_id UUID REFERENCES students(id) ON DELETE CASCADE,
-    date DATE NOT NULL,
-    data JSONB NOT NULL,
-    total_score NUMERIC DEFAULT 0,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    UNIQUE(program_id, student_id, date)
-);
-
--- SUPPORT & FEEDBACK
-CREATE TABLE system_feedback (
-    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-    school_id UUID REFERENCES schools(id) ON DELETE SET NULL,
-    school_name TEXT,
-    email TEXT,
-    message TEXT NOT NULL,
-    type TEXT DEFAULT 'SUPPORT',
-    status TEXT DEFAULT 'OPEN',
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- STAFF (Optional, for Super Admin)
-CREATE TABLE staff_members (
-    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-    name TEXT NOT NULL,
-    role TEXT NOT NULL,
-    email TEXT UNIQUE NOT NULL,
-    status TEXT DEFAULT 'OFFLINE',
-    performance_score INTEGER DEFAULT 100,
-    last_active TIMESTAMP WITH TIME ZONE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- ADS & POSTS
-CREATE TABLE ad_campaigns (
-    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-    image_url TEXT NOT NULL,
-    target_url TEXT,
-    contact_info TEXT,
-    is_active BOOLEAN DEFAULT TRUE,
-    status TEXT DEFAULT 'ACTIVE',
-    views INTEGER DEFAULT 0,
-    clicks INTEGER DEFAULT 0,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
-CREATE TABLE campus_posts (
-    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-    school_id UUID REFERENCES schools(id) ON DELETE CASCADE,
-    author_name TEXT,
-    title TEXT,
-    message TEXT NOT NULL,
-    type TEXT NOT NULL,
-    category TEXT DEFAULT 'NOTICE',
-    likes INTEGER DEFAULT 0,
-    scheduled_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
-CREATE TABLE profile_requests (
-    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-    school_id UUID REFERENCES schools(id) ON DELETE CASCADE,
-    student_id UUID REFERENCES students(id) ON DELETE CASCADE,
-    field TEXT NOT NULL,
-    new_value TEXT NOT NULL,
-    status TEXT DEFAULT 'PENDING',
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- AFFILIATES
-CREATE TABLE affiliates (
-    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-    name TEXT NOT NULL,
-    email TEXT,
-    phone TEXT,
-    code TEXT UNIQUE NOT NULL,
-    earnings NUMERIC DEFAULT 0,
-    schools_referred INTEGER DEFAULT 0,
-    bank_details TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- 6. FUNCTIONS
-
--- Teacher Login
-CREATE OR REPLACE FUNCTION teacher_login(cls_name TEXT, pass TEXT, schl_id UUID)
-RETURNS SETOF classes AS $$
-BEGIN
-  RETURN QUERY SELECT * FROM classes 
-  WHERE name = cls_name 
-  AND teacher_password = pass 
-  AND school_id = schl_id;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- Student Login
-CREATE OR REPLACE FUNCTION student_login(reg_no_in TEXT, pass_in TEXT, schl_id UUID)
-RETURNS SETOF students AS $$
-BEGIN
-  RETURN QUERY SELECT * FROM students 
-  WHERE reg_no = reg_no_in 
-  AND school_id = schl_id
-  AND (
-      password = pass_in 
-      OR 
-      (password IS NULL AND CAST(dob AS TEXT) = pass_in)
-  );
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- Marks Fetcher
-CREATE OR REPLACE FUNCTION get_student_marks(stu_id UUID, term_in TEXT)
-RETURNS SETOF marks AS $$
-BEGIN
-  RETURN QUERY SELECT * FROM marks 
-  WHERE student_id = stu_id AND term = term_in;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- Mark Saver
-CREATE OR REPLACE FUNCTION save_marks(stu_id UUID, term_in TEXT, sub_json JSONB, tot NUMERIC, grd TEXT)
-RETURNS VOID AS $$
-BEGIN
-  INSERT INTO marks (student_id, term, subjects, total, grade)
-  VALUES (stu_id, term_in, sub_json, tot, grd)
-  ON CONFLICT (student_id, term)
-  DO UPDATE SET subjects = EXCLUDED.subjects, total = EXCLUDED.total, grade = EXCLUDED.grade;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- SECURE PASSWORD RESET RPC (Called by Client with Key)
--- NOTE: This requires enabling postgres_fdw or modifying user via Supabase internal logic. 
--- Standard PostgreSQL cannot update Supabase Auth User directly. 
--- However, for the purpose of this script, we assume the application handles it via Service Role key or client-side checks + Auth update.
--- This function is a PLACEHOLDER for logic that validates the key.
-CREATE OR REPLACE FUNCTION validate_recovery_key(admin_email_in TEXT, code_in TEXT)
-RETURNS BOOLEAN AS $$
+-- 3. FUNCTIONS
+CREATE OR REPLACE FUNCTION deduct_credits_safe(school_id_in UUID, amount_in NUMERIC, reason_in TEXT)
+RETURNS JSONB AS $$
 DECLARE
-  exists_count INTEGER;
+  current_bal NUMERIC;
 BEGIN
-  SELECT COUNT(*) INTO exists_count FROM schools 
-  WHERE admin_email = admin_email_in 
-  AND recovery_code = code_in;
+  SELECT wallet_balance INTO current_bal FROM schools WHERE id = school_id_in FOR UPDATE;
   
-  RETURN exists_count > 0;
+  IF current_bal IS NULL OR current_bal < amount_in THEN
+    RETURN '{"success": false, "message": "Insufficient Credits"}'::jsonb;
+  END IF;
+
+  UPDATE schools SET wallet_balance = wallet_balance - amount_in WHERE id = school_id_in;
+  
+  INSERT INTO credit_transactions (school_id, amount, type, description)
+  VALUES (school_id_in, amount_in, 'DEBIT', reason_in);
+  
+  RETURN '{"success": true}'::jsonb;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- Indexes
-CREATE INDEX idx_students_school ON students(school_id);
-CREATE INDEX idx_students_class ON students(class_id);
-CREATE INDEX idx_marks_student ON marks(student_id);
-CREATE INDEX idx_schools_slug ON schools(slug);
-CREATE INDEX idx_classes_school ON classes(school_id);
 `;
 
 const SqlCommand: React.FC = () => {
     const copyToClipboard = () => {
         navigator.clipboard.writeText(SQL_CONTENT);
-        alert('SQL Script Copied!');
+        alert("SQL Copied to Clipboard!");
     };
 
     return (
-        <div className="p-4 md:p-8 min-h-screen bg-slate-50 dark:bg-slate-900">
-            <GlassCard className="h-full flex flex-col">
-                <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-xl font-bold text-slate-800 dark:text-white">Database Setup SQL</h2>
+        <div className="min-h-screen bg-slate-50 dark:bg-slate-900 p-4 md:p-8 animate-fade-in-up">
+            <GlassCard className="max-w-4xl mx-auto h-[85vh] flex flex-col border-t-4 border-emerald-500">
+                <div className="flex justify-between items-center mb-6">
+                    <div>
+                        <h1 className="text-2xl font-black text-slate-800 dark:text-white">Database Setup (v5.0)</h1>
+                        <p className="text-sm text-slate-500">Includes Credit System & 50 Free Welcome Credits</p>
+                    </div>
                     <button 
-                        onClick={copyToClipboard} 
-                        className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors"
+                        onClick={copyToClipboard}
+                        className="bg-emerald-600 text-white px-6 py-2.5 rounded-xl text-sm font-bold hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-500/20"
                     >
                         Copy SQL
                     </button>
                 </div>
-                <div className="bg-slate-900 rounded-xl p-4 overflow-auto max-h-[80vh]">
-                    <pre className="text-green-400 font-mono text-xs whitespace-pre-wrap break-all">
+                
+                <div className="flex-1 bg-slate-950 rounded-xl p-6 overflow-auto border border-slate-800 shadow-inner custom-scrollbar relative group">
+                    <pre className="text-xs font-mono text-green-400 whitespace-pre-wrap leading-relaxed">
                         {SQL_CONTENT}
                     </pre>
+                </div>
+                
+                <div className="mt-6 p-4 bg-yellow-50 dark:bg-yellow-900/10 border border-yellow-200 dark:border-yellow-800 rounded-xl text-xs text-yellow-800 dark:text-yellow-200">
+                    <strong>IMPORTANT:</strong> Running this will set up the new Credit Economy. New schools will automatically get 50 Credits.
                 </div>
             </GlassCard>
         </div>

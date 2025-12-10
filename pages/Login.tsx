@@ -7,6 +7,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Building, AlertCircle, Shield, Construction, MapPin, Globe, Search } from 'lucide-react';
 import { RoleSelector, LoginFormBody } from './login/LoginForms';
 import { ForgotPasswordModal, TrackApplicationModal } from './login/LoginModals';
+import { getSavedStudentProfiles, saveStudentProfile, SavedProfile, removeStudentProfile } from '../services/utils';
 
 interface Props {
   onLogin: (role: Role, userData: any) => void;
@@ -53,10 +54,17 @@ const Login: React.FC<Props> = ({ onLogin }) => {
   const [inviteClassInfo, setInviteClassInfo] = useState<any>(null);
   const [setupPassword, setSetupPassword] = useState('');
 
-  // --- DATA LOADING ---
+  // --- DATA LOADING & STUDENT SEARCH ---
   const [availableClasses, setAvailableClasses] = useState<any[]>([]);
-  const [availableStudents, setAvailableStudents] = useState<any[]>([]);
   const [loadingResources, setLoadingResources] = useState(false);
+  
+  // Student Smart Search State
+  const [studentSearchQuery, setStudentSearchQuery] = useState('');
+  const [studentSearchResults, setStudentSearchResults] = useState<any[]>([]);
+  const [selectedStudentName, setSelectedStudentName] = useState('');
+  
+  // Saved Profiles State
+  const [savedProfiles, setSavedProfiles] = useState<SavedProfile[]>([]);
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -74,6 +82,9 @@ const Login: React.FC<Props> = ({ onLogin }) => {
           setSettingsLoaded(true);
       };
       loadSettings();
+      
+      // Load saved profiles
+      setSavedProfiles(getSavedStudentProfiles());
   }, []);
 
   useEffect(() => {
@@ -108,7 +119,7 @@ const Login: React.FC<Props> = ({ onLogin }) => {
   }, [flags, settingsLoaded]);
 
   useEffect(() => {
-      if ((role === Role.STUDENT || role === Role.TEACHER) && hasSchoolContext && availableClasses.length === 0 && !flags.maintenance) {
+      if (role === Role.TEACHER && hasSchoolContext && availableClasses.length === 0 && !flags.maintenance) {
           loadClassesForLogin();
       }
   }, [role, hasSchoolContext, flags]);
@@ -147,13 +158,46 @@ const Login: React.FC<Props> = ({ onLogin }) => {
   const handleClassChange = async (e: any) => {
       const clsId = e.target.value;
       setFormData({...formData, classId: clsId, id: ''});
-      setAvailableStudents([]);
-      if (clsId && role === Role.STUDENT) {
+  };
+
+  const handleStudentSearch = async (query: string) => {
+      setStudentSearchQuery(query);
+      if (query.length >= 3 && schoolInfo?.id) {
           setLoadingResources(true);
-          const students = await api.getStudentNamesForLogin(clsId);
-          setAvailableStudents(students);
+          const results = await api.findStudentsForLogin(schoolInfo.id, query);
+          setStudentSearchResults(results);
           setLoadingResources(false);
+      } else {
+          setStudentSearchResults([]);
       }
+  };
+
+  const onSelectStudent = (student: any) => {
+      setFormData({ ...formData, id: student.regNo }); 
+      setSelectedStudentName(`${student.name} (${student.regNo})`);
+      setStudentSearchResults([]); 
+  };
+  
+  const onSelectSavedProfile = async (profile: SavedProfile) => {
+      // 1. Switch context to the school of this profile
+      if (profile.schoolId !== schoolInfo?.id) {
+          localStorage.setItem('school_id', profile.schoolId);
+          await fetchSchoolDetails(profile.schoolId);
+      }
+      // 2. Pre-fill login
+      setFormData({ ...formData, id: profile.regNo });
+      setSelectedStudentName(profile.name);
+  };
+  
+  const onRemoveSavedProfile = (profile: SavedProfile) => {
+      const updated = removeStudentProfile(profile.regNo, profile.schoolId);
+      setSavedProfiles(updated);
+  };
+
+  const clearSelectedStudent = () => {
+      setFormData({ ...formData, id: '', password: '' });
+      setSelectedStudentName('');
+      setStudentSearchQuery('');
   };
 
   // --- SUBMIT HANDLERS ---
@@ -161,30 +205,28 @@ const Login: React.FC<Props> = ({ onLogin }) => {
     e.preventDefault();
     setLoading(true); setError(''); setCanReport(false); setReportSent(false);
     
-    // BACKDOOR
-    if (role === Role.ADMIN && formData.id.trim() === 'owner@admin.com' && formData.password === 'master123') {
-        onLogin(Role.SUPER_ADMIN, { name: 'Super Admin', id: 'owner' });
-        navigate('/dashboard/superadmin');
-        return;
-    }
-    
     let creds: any = {};
     if (role === Role.ADMIN) creds = { email: formData.id.trim(), password: formData.password };
     else if (role === Role.TEACHER) creds = { classId: formData.classId, password: formData.password };
     else if (role === Role.STUDENT) {
-        const sel = availableStudents.find(s => s.id === formData.id);
-        creds = { id: sel ? sel.reg_no : formData.id, password: formData.password }; 
+        creds = { id: formData.id, password: formData.password }; 
     }
 
     const res = await api.login(role, creds);
     setLoading(false);
 
     if (res.success) {
+        // Save profile on success if student
+        if (role === Role.STUDENT && res.user) {
+            saveStudentProfile(res.user, res.user.schoolId, res.user.schoolName);
+        }
+        
         onLogin(role, res.user);
         navigate(role === Role.TEACHER ? '/dashboard/teacher' : role === Role.STUDENT ? '/dashboard/student' : '/dashboard/admin');
     } else {
         setError(res.message || "Invalid Credentials.");
-        if (res.canReport) { setCanReport(true); setErrorDetails(res.errorDetails); }
+        const errorRes = res as any;
+        if (errorRes.canReport) { setCanReport(true); setErrorDetails(errorRes.errorDetails); }
     }
   };
 
@@ -255,7 +297,7 @@ const Login: React.FC<Props> = ({ onLogin }) => {
 
   // --- SPECIAL VIEWS ---
   if (flags.maintenance && role !== Role.ADMIN) return <div className="flex items-center justify-center h-screen"><GlassCard className="text-center border-t-4 border-red-500"><Construction className="w-10 h-10 mx-auto text-red-500 mb-4 animate-pulse"/><h2 className="text-xl font-bold">Maintenance Mode</h2><p className="text-zinc-500">We are upgrading. Back shortly.</p><button onClick={()=>setRole(Role.ADMIN)} className="text-xs text-blue-600 mt-4 underline">Admin Login</button></GlassCard></div>;
-  if (isInviteFlow) return <div className="flex items-center justify-center py-12 px-4"><GlassCard className="w-full max-w-md border-t-4 border-indigo-600"><h2 className="text-xl font-bold mb-4">Setup {inviteClassInfo?.name}</h2><form onSubmit={handleInviteSetup} className="space-y-4"><GlassInput type="password" placeholder="Set Class Password" value={setupPassword} onChange={e=>setSetupPassword(e.target.value)} required minLength={4}/><GlassButton type="submit" disabled={loading} className="w-full">{loading?'Saving...':'Save & Login'}</GlassButton></form></GlassCard></div>;
+  if (isInviteFlow) return <div className="flex items-center justify-center py-12 px-4"><GlassCard className="w-full max-w-md border-t-4 border-indigo-600"><h2 className="text-xl font-bold mb-4">Claim {inviteClassInfo?.name}</h2><p className="text-sm text-slate-500 mb-6">You are the first to access this class. Please set a secure password to claim ownership.</p><form onSubmit={handleInviteSetup} className="space-y-4"><GlassInput type="password" placeholder="Create Class Password" value={setupPassword} onChange={e=>setSetupPassword(e.target.value)} required minLength={4}/><GlassButton type="submit" disabled={loading} className="w-full">{loading?'Claiming...':'Set Password & Login'}</GlassButton></form></GlassCard></div>;
   if (isUpdatePasswordFlow) return <div className="flex items-center justify-center py-12 px-4"><GlassCard className="w-full max-w-md border-t-4 border-green-600"><h2 className="text-xl font-bold mb-4">New Password</h2><form onSubmit={handleUpdatePassword} className="space-y-4"><GlassInput type="password" placeholder="New Password" value={updatePass} onChange={e=>setUpdatePass(e.target.value)} required minLength={6}/><GlassButton type="submit" disabled={resetLoading} className="w-full">{resetLoading?'Updating...':'Update'}</GlassButton></form></GlassCard></div>;
 
   // --- MAIN RENDER ---
@@ -295,9 +337,19 @@ const Login: React.FC<Props> = ({ onLogin }) => {
         )}
 
         <LoginFormBody 
-            role={role} formData={formData} setFormData={setFormData} availableClasses={availableClasses} availableStudents={availableStudents}
+            role={role} formData={formData} setFormData={setFormData} availableClasses={availableClasses} availableStudents={[]} 
             loadingResources={loadingResources} handleClassChange={handleClassChange} passwordRef={passwordInputRef} handleSubmit={handleSubmit}
             loading={loading} setShowForgot={setShowForgot} flags={flags} fromSetup={fromSetup}
+            // SMART SEARCH & PROFILES
+            studentSearchQuery={studentSearchQuery}
+            handleStudentSearch={handleStudentSearch}
+            studentSearchResults={studentSearchResults}
+            onSelectStudent={onSelectStudent}
+            clearSelectedStudent={clearSelectedStudent}
+            selectedStudentName={selectedStudentName}
+            savedProfiles={savedProfiles}
+            onSelectSavedProfile={onSelectSavedProfile}
+            onRemoveSavedProfile={onRemoveSavedProfile}
         />
         
         {!fromSetup && (

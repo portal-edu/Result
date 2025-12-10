@@ -25,6 +25,32 @@ export const createClass = async (name: string, teacherPassword: string, teacher
     } catch (e: any) { return { success: false, message: getErrorMsg(e) }; }
 };
 
+// NEW: Bulk Create for Smart Batch Generator
+export const createBulkClasses = async (batchData: { className: string, subjects: SubjectConfig[] }[]) => {
+    const schoolId = getSchoolId();
+    if (!schoolId) return { success: false, message: "Session expired" };
+    if (!isSupabaseConfigured()) return { success: true, created: [] };
+
+    try {
+        const payload = batchData.map(cls => ({
+            school_id: schoolId,
+            name: cls.className.trim().toUpperCase(),
+            teacher_name: "Class Teacher",
+            teacher_password: null, // Left empty for invite claim flow
+            subjects: cls.subjects || [],
+            status: 'DRAFT'
+        }));
+
+        const { data, error } = await supabase.from('classes').insert(payload).select('id, name');
+        
+        if (error) throw error;
+        
+        return { success: true, created: data };
+    } catch (e: any) {
+        return { success: false, message: getErrorMsg(e) };
+    }
+};
+
 export const getClasses = async () => {
     if (!isSupabaseConfigured()) return [];
     const schoolId = getSchoolId();
@@ -92,6 +118,14 @@ export const updateClassDetails = async (classId: string, details: { teacherName
 
 export const setupTeacherLogin = async (classId: string, password: string) => {
     if (!isSupabaseConfigured()) return { success: false, message: "DB Required" };
+    
+    // Check if already has password (safety check for claim)
+    const { data: current } = await supabase.from('classes').select('teacher_password').eq('id', classId).single();
+    if (current?.teacher_password) {
+        // If password exists, this function shouldn't be used to reset it. Use changeClassPassword
+        return { success: false, message: "Class already claimed. Please login." };
+    }
+
     const { error } = await supabase.from('classes')
       .update({ teacher_password: password.toLowerCase() })
       .eq('id', classId);
@@ -172,6 +206,12 @@ export const updateClassSubjects = async (classId: string, subjects: SubjectConf
 export const toggleClassSubmission = async (classId: string, isSubmitted: boolean) => {
     if (!isSupabaseConfigured()) return { success: true };
     const { error } = await supabase.from('classes').update({ status: isSubmitted ? 'SUBMITTED' : 'DRAFT' }).eq('id', classId);
+    return { success: !error, message: error ? getErrorMsg(error) : undefined };
+};
+
+export const updateClassStatus = async (classId: string, status: string) => {
+    if (!isSupabaseConfigured()) return { success: true };
+    const { error } = await supabase.from('classes').update({ status }).eq('id', classId);
     return { success: !error, message: error ? getErrorMsg(error) : undefined };
 };
 

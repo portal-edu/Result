@@ -1,8 +1,8 @@
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { GlassCard } from '../../components/GlassUI';
 import { Student, Marks, AssessmentProgram, SchoolConfig } from '../../types';
-import { Sparkles, Calendar, TrendingUp, BrainCircuit, ClipboardList, Clock, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Sparkles, Calendar, TrendingUp, BrainCircuit, ClipboardList, Clock, CheckCircle2, AlertCircle, Lock } from 'lucide-react';
 
 interface Props {
     user: Student;
@@ -13,7 +13,7 @@ interface Props {
 
 const HomeTab: React.FC<Props> = ({ user, marks, assessments, schoolConfig }) => {
     
-    // --- FREE AI LOGIC ---
+    // --- AI LOGIC ---
     const aiAnalysis = useMemo(() => {
         if (!marks || !marks.subjects) return null;
         
@@ -55,30 +55,50 @@ const HomeTab: React.FC<Props> = ({ user, marks, assessments, schoolConfig }) =>
     return (
         <div className="space-y-6 animate-fade-in-up">
             
-            {/* 1. AI INSIGHT WIDGET */}
+            {/* 1. AI INSIGHT WIDGET (LOCKED FOR FREE USERS) */}
             {aiAnalysis && (
-                <div className={`rounded-3xl p-6 relative overflow-hidden shadow-lg border border-white/10 ${aiAnalysis.mood === 'EXCELLENT' ? 'bg-gradient-to-br from-green-500 to-emerald-700' : aiAnalysis.mood === 'URGENT' ? 'bg-gradient-to-br from-orange-500 to-red-600' : 'bg-gradient-to-br from-indigo-500 to-purple-700'}`}>
+                <div className={`rounded-3xl p-6 relative overflow-hidden shadow-lg border border-white/10 ${user.isPremium ? (aiAnalysis.mood === 'EXCELLENT' ? 'bg-gradient-to-br from-green-500 to-emerald-700' : aiAnalysis.mood === 'URGENT' ? 'bg-gradient-to-br from-orange-500 to-red-600' : 'bg-gradient-to-br from-indigo-500 to-purple-700') : 'bg-slate-900'}`}>
                     <div className="absolute top-0 right-0 p-4 opacity-20 text-white"><BrainCircuit className="w-32 h-32 rotate-12"/></div>
-                    <div className="relative z-10 text-white">
-                        <div className="flex items-center gap-2 mb-3">
-                            <span className="bg-white/20 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 backdrop-blur-md">
-                                <Sparkles className="w-3 h-3"/> AI Smart Analyst
-                            </span>
-                        </div>
-                        <p className="text-lg md:text-xl font-bold leading-relaxed mb-6">
-                            "{aiAnalysis.tip}"
-                        </p>
-                        <div className="grid grid-cols-2 gap-3">
-                            <div className="bg-black/20 backdrop-blur-md rounded-xl p-3 border border-white/10">
-                                <p className="text-[10px] uppercase font-bold opacity-70 mb-1">Strongest</p>
-                                <p className="font-black text-lg truncate">{aiAnalysis.strong}</p>
+                    
+                    {user.isPremium ? (
+                        <div className="relative z-10 text-white animate-fade-in-up">
+                            <div className="flex items-center gap-2 mb-3">
+                                <span className="bg-white/20 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 backdrop-blur-md">
+                                    <Sparkles className="w-3 h-3"/> AI Smart Analyst
+                                </span>
                             </div>
-                            <div className="bg-black/20 backdrop-blur-md rounded-xl p-3 border border-white/10">
-                                <p className="text-[10px] uppercase font-bold opacity-70 mb-1">Improve</p>
-                                <p className="font-black text-lg truncate">{aiAnalysis.weak}</p>
+                            <p className="text-lg md:text-xl font-bold leading-relaxed mb-6">
+                                "{aiAnalysis.tip}"
+                            </p>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="bg-black/20 backdrop-blur-md rounded-xl p-3 border border-white/10">
+                                    <p className="text-[10px] uppercase font-bold opacity-70 mb-1">Strongest</p>
+                                    <p className="font-black text-lg truncate">{aiAnalysis.strong}</p>
+                                </div>
+                                <div className="bg-black/20 backdrop-blur-md rounded-xl p-3 border border-white/10">
+                                    <p className="text-[10px] uppercase font-bold opacity-70 mb-1">Improve</p>
+                                    <p className="font-black text-lg truncate">{aiAnalysis.weak}</p>
+                                </div>
                             </div>
                         </div>
-                    </div>
+                    ) : (
+                        <div className="relative z-10 text-white text-center py-6">
+                            <div className="blur-sm select-none opacity-50 mb-4">
+                                <p className="text-xl font-bold">Your performance requires attention in specific areas.</p>
+                                <div className="grid grid-cols-2 gap-3 mt-4">
+                                    <div className="bg-white/10 h-16 rounded-xl"></div>
+                                    <div className="bg-white/10 h-16 rounded-xl"></div>
+                                </div>
+                            </div>
+                            <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                <div className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center mb-2 backdrop-blur-sm border border-white/20">
+                                    <Lock className="w-6 h-6 text-white"/>
+                                </div>
+                                <h3 className="font-bold text-lg mb-1">Unlock AI Insights</h3>
+                                <p className="text-xs text-slate-300 max-w-xs mx-auto">Get personalized study tips and strength analysis.</p>
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
 

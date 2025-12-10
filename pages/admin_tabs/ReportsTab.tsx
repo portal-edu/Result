@@ -1,10 +1,12 @@
-
 import React, { useState, useEffect } from 'react';
 import { GlassCard, GlassButton, GlassInput, GlassSelect, LoadingScreen } from '../../components/GlassUI';
 import { api } from '../../services/api';
 import { Student, ClassData } from '../../types';
-import { Download, Printer, Settings, Filter, Table, RefreshCw, EyeOff, Eye, FileSpreadsheet } from 'lucide-react';
+import { Download, Printer, Settings, FileSpreadsheet } from 'lucide-react';
 import { formatDate } from '../../services/utils';
+
+// Declare jsPDF global
+// No need to declare here as we cast window to any
 
 const ReportsTab: React.FC = () => {
     const [loading, setLoading] = useState(false);
@@ -41,7 +43,7 @@ const ReportsTab: React.FC = () => {
     const fetchStudents = async (classId: string) => {
         let allStudents: Student[] = [];
         if (classId === 'ALL') {
-            const cls = await api.getClasses(); // Re-fetch to be safe or use state
+            const cls = await api.getClasses(); 
             for (const c of cls) {
                 const s = await api.getStudentsByClass(c.id);
                 const sWithClass = s.map(stu => ({ ...stu, className: c.name }));
@@ -53,7 +55,6 @@ const ReportsTab: React.FC = () => {
             allStudents = s.map(stu => ({ ...stu, className: clsName }));
         }
         
-        // Sort by Class Name then Roll No
         allStudents.sort((a, b) => {
             if (a.className !== b.className) return (a.className || '').localeCompare(b.className || '');
             return (a.rollNo || 0) - (b.rollNo || 0);
@@ -74,17 +75,27 @@ const ReportsTab: React.FC = () => {
         setColumns(prev => ({ ...prev, [key]: !prev[key] }));
     };
 
-    const downloadCSV = () => {
+    const exportPDF = async () => {
+        const jsPDF = (window as any).jspdf?.jsPDF;
+        if (!jsPDF) return alert("PDF Library not ready.");
+        
+        const doc = new jsPDF();
+        const config = await api.getSchoolConfig();
+        const schoolName = config?.schoolName || "Student Report";
+
+        doc.setFontSize(16);
+        doc.text(schoolName, 105, 15, { align: "center" });
+        doc.setFontSize(12);
+        doc.text(`Student List - ${selectedClass === 'ALL' ? 'All Classes' : classes.find(c=>c.id===selectedClass)?.name}`, 105, 22, { align: "center" });
+
         const headers = [];
-        if (columns.rollNo) headers.push('Roll No');
+        if (columns.rollNo) headers.push('Roll');
         if (columns.regNo) headers.push('Reg No');
         if (columns.name) headers.push('Name');
         if (columns.gender) headers.push('Gender');
         if (columns.dob) headers.push('DOB');
-        if (columns.fatherName) headers.push('Father');
-        if (columns.motherName) headers.push('Mother');
         if (columns.className) headers.push('Class');
-        if (columns.status) headers.push('Status');
+        if (columns.fatherName) headers.push('Father');
 
         const rows = students.map(s => {
             const row = [];
@@ -93,25 +104,20 @@ const ReportsTab: React.FC = () => {
             if (columns.name) row.push(s.name);
             if (columns.gender) row.push(s.gender);
             if (columns.dob) row.push(formatDate(s.dob));
-            if (columns.fatherName) row.push(s.fatherName);
-            if (columns.motherName) row.push(s.motherName);
             if (columns.className) row.push(s.className);
-            if (columns.status) row.push(s.isVerified ? 'Active' : 'Pending');
-            return row.map(cell => `"${cell}"`).join(',');
+            if (columns.fatherName) row.push(s.fatherName);
+            return row;
         });
 
-        const csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...rows].join('\n');
-        const encodedUri = encodeURI(csvContent);
-        const link = document.createElement("a");
-        link.setAttribute("href", encodedUri);
-        link.setAttribute("download", `School_Register_${new Date().toISOString().slice(0,10)}.csv`);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    };
+        doc.autoTable({
+            head: [headers],
+            body: rows,
+            startY: 30,
+            styles: { fontSize: 8, cellPadding: 2 },
+            headStyles: { fillColor: [66, 66, 66] }
+        });
 
-    const handlePrint = () => {
-        window.print();
+        doc.save(`Student_Report_${new Date().toISOString().slice(0,10)}.pdf`);
     };
 
     return (
@@ -119,11 +125,7 @@ const ReportsTab: React.FC = () => {
             {/* TOOLBAR */}
             <div className="flex flex-col md:flex-row gap-4 justify-between items-center bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm print:hidden">
                 <div className="flex items-center gap-4 w-full md:w-auto">
-                    <div className="flex items-center gap-2">
-                        <Table className="w-5 h-5 text-blue-600"/>
-                        <h2 className="font-bold text-lg text-slate-800 dark:text-white">Master Register</h2>
-                    </div>
-                    <div className="h-6 w-px bg-slate-300 dark:bg-slate-600"></div>
+                    <h2 className="font-bold text-lg text-slate-800 dark:text-white">Master Register</h2>
                     <GlassSelect value={selectedClass} onChange={handleClassFilter} className="w-40 py-1.5 text-sm">
                         <option value="ALL">All Classes</option>
                         {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -132,10 +134,7 @@ const ReportsTab: React.FC = () => {
 
                 <div className="flex gap-2 w-full md:w-auto">
                     <div className="relative">
-                        <button 
-                            onClick={() => setShowColumnMenu(!showColumnMenu)} 
-                            className="flex items-center gap-2 px-3 py-2 bg-slate-100 dark:bg-slate-700 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-200 transition-colors"
-                        >
+                        <button onClick={() => setShowColumnMenu(!showColumnMenu)} className="flex items-center gap-2 px-3 py-2 bg-slate-100 dark:bg-slate-700 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-200 transition-colors">
                             <Settings className="w-4 h-4"/> Columns
                         </button>
                         {showColumnMenu && (
@@ -143,12 +142,7 @@ const ReportsTab: React.FC = () => {
                                 <p className="text-[10px] uppercase font-bold text-slate-400 mb-2 px-2">Toggle Fields</p>
                                 {Object.keys(columns).map(key => (
                                     <label key={key} className="flex items-center gap-2 px-2 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-700 rounded cursor-pointer">
-                                        <input 
-                                            type="checkbox" 
-                                            checked={(columns as any)[key]} 
-                                            onChange={() => toggleColumn(key as any)}
-                                            className="accent-blue-600"
-                                        />
+                                        <input type="checkbox" checked={(columns as any)[key]} onChange={() => toggleColumn(key as any)} className="accent-blue-600"/>
                                         <span className="text-xs font-medium text-slate-700 dark:text-slate-300 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
                                     </label>
                                 ))}
@@ -156,10 +150,10 @@ const ReportsTab: React.FC = () => {
                         )}
                     </div>
                     
-                    <button onClick={downloadCSV} className="flex items-center gap-2 px-3 py-2 bg-green-50 text-green-700 border border-green-200 rounded-lg text-xs font-bold hover:bg-green-100 transition-colors">
-                        <FileSpreadsheet className="w-4 h-4"/> Export CSV
+                    <button onClick={exportPDF} className="flex items-center gap-2 px-3 py-2 bg-red-50 text-red-700 border border-red-200 rounded-lg text-xs font-bold hover:bg-red-100 transition-colors">
+                        <Download className="w-4 h-4"/> PDF
                     </button>
-                    <button onClick={handlePrint} className="flex items-center gap-2 px-3 py-2 bg-slate-800 text-white rounded-lg text-xs font-bold hover:bg-slate-900 transition-colors">
+                    <button onClick={() => window.print()} className="flex items-center gap-2 px-3 py-2 bg-slate-800 text-white rounded-lg text-xs font-bold hover:bg-slate-900 transition-colors">
                         <Printer className="w-4 h-4"/> Print
                     </button>
                 </div>
@@ -167,13 +161,7 @@ const ReportsTab: React.FC = () => {
 
             {/* TABLE */}
             <GlassCard className="p-0 overflow-hidden min-h-[500px]">
-                {loading ? (
-                    <div className="flex flex-col items-center justify-center h-64">
-                        <LoadingScreen /> 
-                        {/* Inline loading fallback if screen component is full page */}
-                        <div className="mt-4 text-slate-500 text-sm">Loading Register...</div>
-                    </div>
-                ) : (
+                {loading ? <div className="flex flex-col items-center justify-center h-64"><LoadingScreen /><div className="mt-4 text-slate-500 text-sm">Loading Register...</div></div> : (
                     <div className="overflow-x-auto custom-scrollbar">
                         <table className="w-full text-left text-sm border-collapse whitespace-nowrap">
                             <thead className="bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 font-bold uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-700">
@@ -202,31 +190,16 @@ const ReportsTab: React.FC = () => {
                                         {columns.className && <td className="p-3"><span className="bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase">{s.className}</span></td>}
                                         {columns.fatherName && <td className="p-3 text-xs text-slate-500">{s.fatherName}</td>}
                                         {columns.motherName && <td className="p-3 text-xs text-slate-500">{s.motherName}</td>}
-                                        {columns.status && (
-                                            <td className="p-3 text-center">
-                                                {s.isVerified ? (
-                                                    <span className="text-[10px] text-green-600 bg-green-50 px-2 py-0.5 rounded-full font-bold">Active</span>
-                                                ) : (
-                                                    <span className="text-[10px] text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full font-bold">Pending</span>
-                                                )}
-                                            </td>
-                                        )}
+                                        {columns.status && <td className="p-3 text-center">{s.isVerified ? <span className="text-[10px] text-green-600 bg-green-50 px-2 py-0.5 rounded-full font-bold">Active</span> : <span className="text-[10px] text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full font-bold">Pending</span>}</td>}
                                     </tr>
                                 ))}
-                                {students.length === 0 && (
-                                    <tr>
-                                        <td colSpan={10} className="p-8 text-center text-slate-400 italic">No records found.</td>
-                                    </tr>
-                                )}
+                                {students.length === 0 && <tr><td colSpan={10} className="p-8 text-center text-slate-400 italic">No records found.</td></tr>}
                             </tbody>
                         </table>
                     </div>
                 )}
             </GlassCard>
-            
-            <div className="text-center text-[10px] text-slate-400 print:hidden">
-                Showing {students.length} Records • Generated on {new Date().toLocaleDateString()}
-            </div>
+            <div className="text-center text-[10px] text-slate-400 print:hidden">Showing {students.length} Records • Generated on {new Date().toLocaleDateString()}</div>
         </div>
     );
 };

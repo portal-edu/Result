@@ -1,13 +1,9 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { HashRouter, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
 import Landing from './pages/Landing';
 import SetupWizard from './pages/SetupWizard';
 import Login from './pages/Login';
-import DashboardTeacher from './pages/DashboardTeacher';
-import DashboardAdmin from './pages/DashboardAdmin';
-import DashboardStudent from './pages/DashboardStudent';
-import DashboardSuperAdmin from './pages/DashboardSuperAdmin';
 import PublicResult from './pages/PublicResult';
 import PublicRegistration from './pages/PublicRegistration';
 import PortalResolver from './pages/PortalResolver';
@@ -21,41 +17,27 @@ import SupportChat from './components/SupportChat';
 import Footer from './components/Footer'; 
 import InstallPWA from './components/InstallPWA';
 import { Role } from './types';
-import { GraduationCap, LogOut, Sun, Moon, Download } from 'lucide-react';
+import { GraduationCap, LogOut, Sun, Moon } from 'lucide-react';
 import { saveSupabaseConfig } from './services/supabaseClient';
 import { api } from './services/api';
+
+// --- LAZY LOADED DASHBOARDS (Code Splitting) ---
+const DashboardTeacher = React.lazy(() => import('./pages/DashboardTeacher'));
+const DashboardAdmin = React.lazy(() => import('./pages/DashboardAdmin'));
+const DashboardStudent = React.lazy(() => import('./pages/DashboardStudent'));
+const DashboardSuperAdmin = React.lazy(() => import('./pages/DashboardSuperAdmin'));
+const DashboardPrincipal = React.lazy(() => import('./pages/DashboardPrincipal')); 
+const PrincipalSetup = React.lazy(() => import('./pages/PrincipalSetup')); 
 
 const Layout: React.FC<{ children: React.ReactNode; user: any; role: Role | null; onLogout: () => void; theme: string; toggleTheme: () => void }> = ({ children, user, role, onLogout, theme, toggleTheme }) => {
     const [logoUrl, setLogoUrl] = useState<string | null>(null);
     const [themeColor, setThemeColor] = useState('blue');
     
-    const [installPrompt, setInstallPrompt] = useState<any>(null);
-    const [isAppInstalled, setIsAppInstalled] = useState(false);
-    
     const location = useLocation();
-    const isLandingPage = location.pathname === '/';
-    const isSetupPage = location.pathname === '/setup';
-    const isLoginPage = location.pathname === '/login';
-
-    useEffect(() => {
-        if (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true) {
-            setIsAppInstalled(true);
-        }
-
-        const handler = (e: any) => {
-            e.preventDefault();
-            setInstallPrompt(e);
-        };
-        
-        window.addEventListener('beforeinstallprompt', handler);
-        return () => window.removeEventListener('beforeinstallprompt', handler);
-    }, []);
-
-    const handleInstallApp = () => {
-        if (!installPrompt) return;
-        installPrompt.prompt();
-        setInstallPrompt(null);
-    };
+    
+    const hideNavbarRoutes = ['/', '/setup', '/login', '/register', '/principal-setup'];
+    const shouldHideNavbar = hideNavbarRoutes.includes(location.pathname);
+    const hideFooter = location.pathname.startsWith('/dashboard') || hideNavbarRoutes.includes(location.pathname);
 
     useEffect(() => {
         const updateManifest = (name: string, iconUrl: string, schoolId: string) => {
@@ -145,7 +127,6 @@ const Layout: React.FC<{ children: React.ReactNode; user: any; role: Role | null
         }
     };
 
-    // Determine where the logo should link to
     const schoolHomeLink = (user && (user.schoolId || user.id)) 
         ? `/school/${user.schoolId || user.id}` 
         : localStorage.getItem('school_id') 
@@ -155,8 +136,7 @@ const Layout: React.FC<{ children: React.ReactNode; user: any; role: Role | null
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-slate-900 font-sans text-slate-900 dark:text-slate-100 transition-colors duration-200 flex flex-col">
           
-          {/* Hide Navbar on Landing Page to avoid double header */}
-          {!isLandingPage && (
+          {!shouldHideNavbar && (
               <nav className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-50 transition-colors duration-200">
                   <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                       <div className="flex justify-between h-16">
@@ -178,17 +158,6 @@ const Layout: React.FC<{ children: React.ReactNode; user: any; role: Role | null
                               </Link>
                           </div>
                           <div className="flex items-center gap-4">
-                              
-                              {/* Install Button - Visible on Tablet/Desktop too */}
-                              {installPrompt && !isAppInstalled && (
-                                  <button 
-                                    onClick={handleInstallApp}
-                                    className="flex items-center gap-2 bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-3 py-1.5 rounded-full text-xs font-bold hover:scale-105 transition-transform shadow-lg animate-pulse"
-                                  >
-                                      <Download className="w-3 h-3"/> Install App
-                                  </button>
-                              )}
-
                               <button 
                                 onClick={toggleTheme} 
                                 className="p-2 text-slate-500 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400 transition-colors rounded-full hover:bg-slate-100 dark:hover:bg-slate-700"
@@ -200,18 +169,16 @@ const Layout: React.FC<{ children: React.ReactNode; user: any; role: Role | null
                               {user ? (
                                    <div className="flex items-center gap-4">
                                         <span className="text-sm text-slate-500 dark:text-slate-400 hidden md:block">
-                                            {role === Role.SUPER_ADMIN ? 'Platform Owner' : role === Role.ADMIN ? 'Admin' : role === Role.TEACHER ? `Teacher (${user.name})` : user.name}
+                                            {role === Role.SUPER_ADMIN ? 'Platform Owner' : role === Role.ADMIN ? 'Admin' : role === Role.PRINCIPAL ? 'Principal' : role === Role.TEACHER ? `Teacher (${user.name})` : user.name}
                                         </span>
                                         <button onClick={onLogout} className="text-slate-500 hover:text-red-600 dark:text-slate-400 dark:hover:text-red-400 transition-colors">
                                             <LogOut className="w-5 h-5" />
                                         </button>
                                    </div>
                               ) : (
-                                  !isSetupPage && !isLoginPage && (
-                                      <div className="flex gap-4 text-sm font-medium text-slate-600 dark:text-slate-300">
-                                          <Link to="/login" className="hover:text-blue-600 dark:hover:text-blue-400 font-bold whitespace-nowrap">Admin Login</Link>
-                                      </div>
-                                  )
+                                  <div className="flex gap-4 text-sm font-medium text-slate-600 dark:text-slate-300">
+                                      <Link to="/login" className="hover:text-blue-600 dark:hover:text-blue-400 font-bold whitespace-nowrap">Admin Login</Link>
+                                  </div>
                               )}
                           </div>
                       </div>
@@ -220,11 +187,12 @@ const Layout: React.FC<{ children: React.ReactNode; user: any; role: Role | null
           )}
     
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full">
-            {children}
+            <Suspense fallback={<LoadingScreen />}>
+                {children}
+            </Suspense>
           </div>
           
-          {/* Hide footer on critical pages for better focus */}
-          {!isSetupPage && !isLoginPage && <Footer />}
+          {!hideFooter && <Footer />}
           
           <InstallPWA />
           <SupportChat />
@@ -327,6 +295,13 @@ const App: React.FC = () => {
           <Route path="/partner" element={<AffiliateProgram />} />
           <Route path="/portal/:slug" element={<PortalResolver />} />
           <Route path="/school/:slug" element={<SchoolProfilePage />} />
+          
+          <Route path="/principal-setup" element={
+              <Suspense fallback={<LoadingScreen />}>
+                  <PrincipalSetup />
+              </Suspense>
+          } /> 
+          
           <Route path="/sql" element={<SqlCommand />} />
           <Route path="/privacy" element={<Legal section="privacy" />} />
           <Route path="/terms" element={<Legal section="terms" />} />
@@ -340,6 +315,12 @@ const App: React.FC = () => {
           <Route path="/dashboard/admin" element={
               (currentRole === Role.ADMIN) 
               ? <DashboardAdmin /> 
+              : <Navigate to="/login" replace />
+          } />
+
+          <Route path="/dashboard/principal" element={
+              (currentRole === Role.PRINCIPAL) 
+              ? <DashboardPrincipal /> 
               : <Navigate to="/login" replace />
           } />
 

@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -7,12 +8,19 @@
     <meta name="description" content="The easiest way for schools, madrassas, and tuitions in Kerala to publish results online. AI-powered, mobile-first, and secure.">
     
     <!-- PWA Setup -->
-    <link rel="manifest" id="app-manifest" href="./assets/manifest-DCg7XHZH.json">
+    <link rel="manifest" id="app-manifest" href="manifest.json">
     <meta name="theme-color" content="#2563eb">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="apple-touch-icon" id="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/2997/2997235.png">
     <link rel="icon" id="app-favicon" type="image/png" href="https://cdn-icons-png.flaticon.com/512/2997/2997235.png">
+
+    <!-- Cashfree SDK -->
+    <script src="https://sdk.cashfree.com/js/v3/cashfree.js"></script>
+    
+    <!-- PDF Generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.1/jspdf.plugin.autotable.min.js"></script>
 
     <!-- Tailwind CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -50,7 +58,6 @@
         }
       }
     </style>
-
   <script type="importmap">
 {
   "imports": {
@@ -66,9 +73,9 @@
   }
 }
 </script>
-  <script type="module" crossorigin src="./assets/index-E6X91Rqg.js"></script>
 </head>
   <body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white transition-colors duration-200">
-    <div id="root"></div>
+    <div id="root"></div>
+    <script type="module" src="./index.tsx"></script>
   </body>
 </html>

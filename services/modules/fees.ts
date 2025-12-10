@@ -6,16 +6,22 @@ import { getStudentsByClass } from './students';
 
 export const createFeeStructure = async (
     name: string, 
-    amount: number, 
+    amount: number | string, 
     dueDate: string, 
     targetClassIds: string[] = [], 
     collectedBy: 'ADMIN'|'TEACHER'|'BOTH' = 'ADMIN',
     recurrence?: { frequency: string, count: number }
 ) => {
     const schoolId = getSchoolId();
-    if (!schoolId) return { success: false };
+    if (!schoolId) return { success: false, message: "Session expired" };
     if (!isSupabaseConfigured()) return { success: true };
     
+    // Validate Amount - Handle string input safely
+    const finalAmount = parseFloat(amount.toString());
+    if (isNaN(finalAmount) || finalAmount <= 0) {
+        return { success: false, message: "Invalid Amount" };
+    }
+
     const feesToCreate = [];
     let currentDueDate = new Date(dueDate || new Date());
 
@@ -35,9 +41,9 @@ export const createFeeStructure = async (
             feesToCreate.push({
                 school_id: schoolId,
                 name: feeName,
-                amount,
+                amount: finalAmount,
                 due_date: nextDate.toISOString().split('T')[0],
-                target_class_ids: targetClassIds,
+                target_class_ids: targetClassIds && targetClassIds.length > 0 ? targetClassIds : [], // Ensure array
                 collected_by: collectedBy
             });
         }
@@ -45,9 +51,9 @@ export const createFeeStructure = async (
         feesToCreate.push({
             school_id: schoolId,
             name,
-            amount,
+            amount: finalAmount,
             due_date: dueDate,
-            target_class_ids: targetClassIds,
+            target_class_ids: targetClassIds && targetClassIds.length > 0 ? targetClassIds : [], // Ensure array
             collected_by: collectedBy
         });
     }
@@ -67,7 +73,9 @@ export const getFeeStructures = async (classId?: string) => {
 
     return data.filter((fee: any) => {
         if (classId && fee.target_class_ids && fee.target_class_ids.length > 0) {
-            return fee.target_class_ids.includes(classId);
+            // If targetClassIds is a JSON string, parse it, otherwise use as array
+            const targets = typeof fee.target_class_ids === 'string' ? JSON.parse(fee.target_class_ids) : fee.target_class_ids;
+            return targets.includes(classId);
         }
         return true; 
     }).map((fee: any) => ({
@@ -75,27 +83,51 @@ export const getFeeStructures = async (classId?: string) => {
         name: fee.name,
         amount: fee.amount,
         dueDate: fee.due_date,
-        targetClassIds: fee.target_class_ids,
+        targetClassIds: typeof fee.target_class_ids === 'string' ? JSON.parse(fee.target_class_ids) : fee.target_class_ids,
         collectedBy: fee.collected_by || 'ADMIN',
         createdAt: fee.created_at
     } as FeeStructure));
 };
 
-export const recordFeePayment = async (feeId: string, studentId: string, amountPaid: number, collectedBy: string) => {
+// IMPROVED: Logic for Partial Payments
+export const recordFeePayment = async (feeId: string, studentId: string, amountPayingNow: number, totalFeeAmount: number, collectedBy: string) => {
     if (!isSupabaseConfigured()) return { success: true, transactionId: 'DEMO-TXN' };
     const tid = 'TXN-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
     
-    const { error } = await supabase.from('fee_payments').upsert({
-        fee_id: feeId,
-        student_id: studentId,
-        amount_paid: amountPaid,
-        status: 'PAID',
-        paid_date: new Date().toISOString(),
-        collected_by: collectedBy,
-        transaction_id: tid
-    }, { onConflict: 'fee_id, student_id' });
-    
-    return { success: !error, message: error ? getErrorMsg(error) : undefined, transactionId: tid };
+    try {
+        // 1. Check existing payment to handle partial accumulation
+        const { data: existing } = await supabase.from('fee_payments')
+            .select('amount_paid')
+            .eq('fee_id', feeId)
+            .eq('student_id', studentId)
+            .maybeSingle();
+
+        // 2. Calculate new total
+        const previousPaid = existing?.amount_paid || 0;
+        const newTotalPaid = previousPaid + amountPayingNow;
+        
+        // 3. Determine Status
+        // Allow a small margin of error for float comparison, or just strict check
+        const status = newTotalPaid >= totalFeeAmount ? 'PAID' : 'PARTIAL';
+
+        // 4. Upsert (Create or Update)
+        const { error } = await supabase.from('fee_payments').upsert({
+            fee_id: feeId,
+            student_id: studentId,
+            amount_paid: newTotalPaid,
+            status: status,
+            paid_date: new Date().toISOString(),
+            collected_by: collectedBy,
+            transaction_id: tid // Updates transaction ID to the latest receipt
+        }, { onConflict: 'fee_id, student_id' });
+
+        if (error) throw error;
+
+        return { success: true, transactionId: tid };
+
+    } catch (e: any) {
+        return { success: false, message: getErrorMsg(e) };
+    }
 };
 
 export const getStudentPayments = async (studentId: string) => {
@@ -116,7 +148,7 @@ export const getFeeCollectionStats = async (feeId: string, classId: string) => {
 
     return students.map(s => ({
         student: s,
-        status: paymentMap.has(s.id) ? 'PAID' : 'PENDING',
+        status: paymentMap.has(s.id) ? paymentMap.get(s.id).status : 'PENDING',
         paymentDetails: paymentMap.get(s.id) || null
     }));
 };

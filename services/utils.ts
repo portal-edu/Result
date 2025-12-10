@@ -44,6 +44,9 @@ export const getErrorMsg = (e: any): string => {
     return "An unexpected error occurred.";
 };
 
+// UPDATED: Aggressive Compression for Storage Saving
+// Reduces images to passport size (~300px width) and lower quality (0.6)
+// This ensures 1000s of student photos don't fill up storage.
 export const compressImage = (file: File): Promise<Blob> => {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -53,7 +56,7 @@ export const compressImage = (file: File): Promise<Blob> => {
             img.src = event.target?.result as string;
             img.onload = () => {
                 const canvas = document.createElement('canvas');
-                const MAX_WIDTH = 500; 
+                const MAX_WIDTH = 300; // Reduced from 500 to 300 for Passport Size optimization
                 const scaleSize = MAX_WIDTH / img.width;
                 canvas.width = MAX_WIDTH;
                 canvas.height = img.height * scaleSize;
@@ -61,10 +64,11 @@ export const compressImage = (file: File): Promise<Blob> => {
                 const ctx = canvas.getContext('2d');
                 ctx?.drawImage(img, 0, 0, canvas.width, canvas.height);
 
+                // Lower quality to 0.6 for maximum space saving
                 canvas.toBlob((blob) => {
                     if (blob) resolve(blob);
                     else reject(new Error('Canvas is empty'));
-                }, 'image/jpeg', 0.8);
+                }, 'image/jpeg', 0.6);
             };
         };
         reader.onerror = (error) => reject(error);
@@ -85,6 +89,39 @@ export const formatDate = (dateString: string | undefined | null): string => {
     const year = date.getFullYear();
     
     return `${day}-${month}-${year}`;
+};
+
+// NEW: Robust Date Parser for CSV Imports (DD/MM/YYYY -> YYYY-MM-DD)
+export const parseDateToISO = (dateStr: string): string => {
+    if (!dateStr) return '2000-01-01'; // Default fallback
+    
+    const cleanStr = dateStr.trim();
+    
+    // Check if already ISO (YYYY-MM-DD)
+    if (/^\d{4}-\d{2}-\d{2}$/.test(cleanStr)) return cleanStr;
+    
+    // Handle DD/MM/YYYY or DD-MM-YYYY or DD.MM.YYYY
+    // Regex matches 1-2 digits, separator, 1-2 digits, separator, 4 digits
+    const match = cleanStr.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})$/);
+    
+    if (match) {
+        const day = match[1].padStart(2, '0');
+        const month = match[2].padStart(2, '0');
+        const year = match[3];
+        return `${year}-${month}-${day}`;
+    }
+    
+    // Try standard date parse as last resort
+    const timestamp = Date.parse(cleanStr);
+    if (!isNaN(timestamp)) {
+        try {
+            return new Date(timestamp).toISOString().split('T')[0];
+        } catch (e) {
+            return '2000-01-01';
+        }
+    }
+
+    return '2000-01-01';
 };
 
 export const parseSubjects = (json: any): SubjectConfig[] => {
@@ -133,4 +170,125 @@ export const transformMarks = (m: any): Marks => {
         grade: m.grade,
         resultStatus: m.grade === 'F' ? 'FAILED' : 'PASS' 
     };
+};
+
+// --- NEW CENTRALIZED UTILS ---
+
+export const calculateGrade = (totalMarks: number, maxMarks: number, hasSubjectFailure: boolean = false) => {
+    const percentage = maxMarks > 0 ? (totalMarks / maxMarks) * 100 : 0;
+    
+    let grade = 'F';
+    if (percentage >= 90) grade = 'A+';
+    else if (percentage >= 80) grade = 'A';
+    else if (percentage >= 70) grade = 'B+';
+    else if (percentage >= 60) grade = 'B';
+    else if (percentage >= 50) grade = 'C+';
+    else if (percentage >= 40) grade = 'C';
+    else grade = 'D';
+
+    let resultStatus: 'PASS' | 'FAILED' = 'PASS';
+    
+    // Explicit failure override
+    if (hasSubjectFailure || grade === 'F' || grade === 'D') {
+        resultStatus = 'FAILED';
+    }
+
+    return { grade, resultStatus, percentage };
+};
+
+export const sanitizePhone = (phone: string) => {
+    // Removes spaces, dashes, parentheses, +91 etc. Returns last 10 digits.
+    return phone.replace(/\D/g, '').slice(-10);
+};
+
+export const parseCSVLine = (line: string) => {
+    const result = [];
+    let start = 0;
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+        if (line[i] === '"') {
+            inQuotes = !inQuotes;
+        } else if (line[i] === ',' && !inQuotes) {
+            let field = line.substring(start, i).trim();
+            if (field.startsWith('"') && field.endsWith('"')) {
+                field = field.substring(1, field.length - 1);
+            }
+            result.push(field);
+            start = i + 1;
+        }
+    }
+    let lastField = line.substring(start).trim();
+    if (lastField.startsWith('"') && lastField.endsWith('"')) {
+        lastField = lastField.substring(1, lastField.length - 1);
+    }
+    result.push(lastField);
+    return result;
+};
+
+// Helper to safely merge custom data into social_links JSONB without overwriting existing data
+export const mergeCustomData = (existingJson: any, newCustomData: any) => {
+    const safeExisting = existingJson || {};
+    return {
+        ...safeExisting,
+        custom_data: {
+            ...(safeExisting.custom_data || {}),
+            ...newCustomData
+        }
+    };
+};
+
+// --- SAVED ACCOUNTS UTILS ---
+const STORAGE_KEY_PROFILES = 'saved_student_profiles';
+
+export interface SavedProfile {
+    regNo: string;
+    name: string;
+    fatherName: string;
+    schoolId: string;
+    schoolName?: string;
+    photoUrl?: string;
+    className?: string;
+    lastLogin: number;
+}
+
+export const getSavedStudentProfiles = (): SavedProfile[] => {
+    try {
+        const data = localStorage.getItem(STORAGE_KEY_PROFILES);
+        return data ? JSON.parse(data) : [];
+    } catch (e) { return []; }
+};
+
+export const saveStudentProfile = (student: Student, schoolId: string, schoolName?: string) => {
+    try {
+        let profiles = getSavedStudentProfiles();
+        
+        // Remove if existing (to update/move to top)
+        profiles = profiles.filter(p => !(p.regNo === student.regNo && p.schoolId === schoolId));
+        
+        // Add to top
+        profiles.unshift({
+            regNo: student.regNo,
+            name: student.name,
+            fatherName: student.fatherName,
+            schoolId: schoolId,
+            schoolName: schoolName,
+            photoUrl: student.photoUrl,
+            className: student.className,
+            lastLogin: Date.now()
+        });
+        
+        // Limit to 5
+        if (profiles.length > 5) profiles.pop();
+        
+        localStorage.setItem(STORAGE_KEY_PROFILES, JSON.stringify(profiles));
+    } catch (e) { console.error("Failed to save profile", e); }
+};
+
+export const removeStudentProfile = (regNo: string, schoolId: string) => {
+    try {
+        let profiles = getSavedStudentProfiles();
+        profiles = profiles.filter(p => !(p.regNo === regNo && p.schoolId === schoolId));
+        localStorage.setItem(STORAGE_KEY_PROFILES, JSON.stringify(profiles));
+        return profiles;
+    } catch (e) { return []; }
 };

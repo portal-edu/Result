@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { GlassCard, GlassButton, GlassInput } from '../components/GlassUI';
-import { Search, Download, Award, GraduationCap, ChevronLeft, MessageCircle, Volume2, Sparkles, TrendingUp, BrainCircuit, Lock, CheckCircle2 } from 'lucide-react';
+import { Search, Download, Award, GraduationCap, ChevronLeft, MessageCircle, Volume2, Sparkles, TrendingUp, BrainCircuit, Lock, CheckCircle2, Zap } from 'lucide-react';
 import { api } from '../services/api';
 import { Marks, Student, SchoolConfig } from '../types';
 import { useNavigate } from 'react-router-dom';
@@ -15,6 +15,7 @@ const PublicResult: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [hasContext, setHasContext] = useState(true);
+    const [currentSchoolId, setCurrentSchoolId] = useState('');
     
     // AI Feature State
     const [isSpeaking, setIsSpeaking] = useState(false);
@@ -27,6 +28,8 @@ const PublicResult: React.FC = () => {
         const schoolId = localStorage.getItem('school_id');
         if (!schoolId) {
             setHasContext(false);
+        } else {
+            setCurrentSchoolId(schoolId);
         }
     }, []);
 
@@ -136,7 +139,9 @@ const PublicResult: React.FC = () => {
         const statusEmoji = isPass ? '🏆' : '📚';
         const statusText = isPass ? 'PASSED' : 'CHECKED';
         
-        const text = `*${result.schoolConfig.schoolName}*\n\n${statusEmoji} *RESULT DECLARED* ${statusEmoji}\n\n👤 Name: *${result.student.name}*\n🎓 Status: *${statusText}*\n📊 Total: *${result.marks.total}*\n\n👇 *Click to View Full Marklist:*\n${window.location.href}`;
+        // VIRAL LOOP TEXT
+        const viralFooter = `\n\n⚡ *Checked via ResultMate*`;
+        const text = `*${result.schoolConfig.schoolName}*\n\n${statusEmoji} *RESULT DECLARED* ${statusEmoji}\n\n👤 Name: *${result.student.name}*\n🎓 Status: *${statusText}*\n📊 Total: *${result.marks.total}*\n\n👇 *View Full Marklist:*\n${window.location.href}${viralFooter}`;
         
         const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
         window.open(url, '_blank');
@@ -194,6 +199,12 @@ const PublicResult: React.FC = () => {
         
         setIsSpeaking(true);
         window.speechSynthesis.speak(utterance);
+    };
+
+    // --- VIRAL LOOP NAVIGATION ---
+    const handleCreateOwn = () => {
+        // Appends current school ID as Referrer, and 'RESULT_PAGE' as source
+        navigate(`/setup?ref=${currentSchoolId}&source=RESULT_PAGE`);
     };
 
     if (!hasContext) {
@@ -370,6 +381,17 @@ const PublicResult: React.FC = () => {
                     <button onClick={() => { setResult(null); setRegNo(''); setDob(''); }} className="mt-8 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white flex items-center gap-2 mx-auto text-sm font-bold transition-colors print:hidden">
                         <ChevronLeft className="w-4 h-4"/> Check Another Result
                     </button>
+
+                    {/* VIRAL LOOP FOOTER (ATTRIBUTION) */}
+                    <div className="mt-12 pt-6 border-t border-slate-200 dark:border-slate-800 text-center print:hidden">
+                        <p className="text-xs text-slate-500 mb-3">Want a Result Portal for your School?</p>
+                        <button 
+                            onClick={handleCreateOwn}
+                            className="bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-6 py-3 rounded-full text-xs font-bold shadow-xl flex items-center gap-2 mx-auto hover:scale-105 transition-transform"
+                        >
+                            <Zap className="w-3 h-3 fill-current"/> Powered by ResultMate - Create Yours
+                        </button>
+                    </div>
                 </div>
             )}
         </div>
