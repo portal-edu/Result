@@ -1,0 +1,23 @@
+
+{
+  "short_name": "ResultMate",
+  "name": "ResultMate Campus",
+  "icons": [
+    {
+      "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj48cmVjdCB3aWR0aD0iNTEyIiBoZWlnaHQ9IjUxMiIgcng9IjEyMCIgZmlsbD0iIzI1NjNlYiIvPjxwYXRoIGZpbGw9IndoaXRlIiBkPSJNMTEyIDE5Mmw5NiA0OC05NiA0OHYxMTJjMCA0MCA2NCA3MCAxNDQgNzBzMTQ0LTMwIDE0NC03MFYyODhsLTk2LTQ4IDk2LTQ4IDE2LTggODAgNDB2MTI4aC0zMlYyNTZsLTQ4LTI0TDI1NiAxMjAgMzIgMjMybDE2IDh6bTI4OCAxMTJsLTQ4LTI0LTY0IDMyLTY0LTMyLTQ4IDI0IDExMiA1NiAxMTItNTZ6Ii8+PC9zdmc+",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj48cmVjdCB3aWR0aD0iNTEyIiBoZWlnaHQ9IjUxMiIgcng9IjEyMCIgZmlsbD0iIzI1NjNlYiIvPjxwYXRoIGZpbGw9IndoaXRlIiBkPSJNMTEyIDE5Mmw5NiA0OC05NiA0OHYxMTJjMCA0MCA2NCA3MCAxNDQgNzBzMTQ0LTMwIDE0NC03MFYyODhsLTk2LTQ4IDk2LTQ4IDE2LTggODAgNDB2MTI4aC0zMlYyNTZsLTQ4LTI0TDI1NiAxMjAgMzIgMjMybDE2IDh6bTI4OCAxMTJsLTQ4LTI0LTY0IDMyLTY0LTMyLTQ4IDI0IDExMiA1NiAxMTItNTZ6Ii8+PC9zdmc+",
+      "sizes": "512x512",
+      "type": "image/svg+xml"
+    }
+  ],
+  "start_url": "./index.html",
+  "display": "standalone",
+  "theme_color": "#2563eb",
+  "background_color": "#ffffff",
+  "orientation": "portrait",
+  "scope": "."
+}
