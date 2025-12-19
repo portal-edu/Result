@@ -1,95 +1,74 @@
 
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>ResultMate - Smart Campus OS</title>
-    <meta name="description" content="The easiest way for schools, madrassas, and tuitions in Kerala to publish results online. AI-powered, mobile-first, and secure.">
-    
-    <!-- PWA Setup -->
-    <link rel="manifest" id="app-manifest" href="./assets/manifest-DBoudVhj.json">
-    <meta name="theme-color" content="#2563eb">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    
-    <!-- Updated Icon (Blue Square with White Cap) -->
-    <link rel="icon" id="app-favicon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj48cmVjdCB3aWR0aD0iNTEyIiBoZWlnaHQ9IjUxMiIgcng9IjEyMCIgZmlsbD0iIzI1NjNlYiIvPjxwYXRoIGZpbGw9IndoaXRlIiBkPSJNMTEyIDE5Mmw5NiA0OC05NiA0OHYxMTJjMCA0MCA2NCA3MCAxNDQgNzBzMTQ0LTMwIDE0NC03MFYyODhsLTk2LTQ4IDk2LTQ4IDE2LTggODAgNDB2MTI4aC0zMlYyNTZsLTQ4LTI0TDI1NiAxMjAgMzIgMjMybDE2IDh6bTI4OCAxMTJsLTQ4LTI0LTY0IDMyLTY0LTMyLTQ4IDI0IDExMiA1NiAxMTItNTZ6Ii8+PC9zdmc+">
-    <link rel="apple-touch-icon" id="apple-touch-icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj48cmVjdCB3aWR0aD0iNTEyIiBoZWlnaHQ9IjUxMiIgcng9IjEyMCIgZmlsbD0iIzI1NjNlYiIvPjxwYXRoIGZpbGw9IndoaXRlIiBkPSJNMTEyIDE5Mmw5NiA0OC05NiA0OHYxMTJjMCA0MCA2NCA3MCAxNDQgNzBzMTQ0LTMwIDE0NC03MFYyODhsLTk2LTQ4IDk2LTQ4IDE2LTggODAgNDB2MTI4aC0zMlYyNTZsLTQ4LTI0TDI1NiAxMjAgMzIgMjMybDE2IDh6bTI4OCAxMTJsLTQ4LTI0LTY0IDMyLTY0LTMyLTQ4IDI0IDExMiA1NiAxMTItNTZ6Ii8+PC9zdmc+">
-
-    <!-- Runtime Configuration: Edit these values directly on the server to change DB connection without rebuilding -->
-    <script>
-      window.__RUNTIME_CONFIG__ = {
-        VITE_SUPABASE_URL: "PLACEHOLDER_URL",
-        VITE_SUPABASE_KEY: "PLACEHOLDER_KEY"
-      };
-    </script>
-
-    <!-- Cashfree SDK -->
-    <script src="https://sdk.cashfree.com/js/v3/cashfree.js"></script>
-    <!-- Razorpay SDK -->
-    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
-    
-    <!-- PDF Generation -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.1/jspdf.plugin.autotable.min.js"></script>
-
-    <!-- Tailwind CDN -->
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EduResult Pro | Official Portal</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        darkMode: 'class',
-      }
-    </script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
-      body { font-family: 'Inter', sans-serif; }
-      ::-webkit-scrollbar { width: 8px; height: 8px; }
-      ::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.05); }
-      ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.2); border-radius: 4px; }
-      ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.3); }
-      
-      @media print {
-        body * {
-          visibility: hidden;
+        :root {
+            --brand-blue: #3b82f6;
+            --surface-dark: #020617;
         }
-        .print\:block, .print\:block * {
-          visibility: visible;
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--surface-dark);
+            color: #f8fafc;
+            -webkit-tap-highlight-color: transparent;
+            letter-spacing: -0.011em;
         }
-        .print\:hidden {
-          display: none !important;
+        .font-display {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            letter-spacing: -0.02em;
         }
-        .print\:block {
-          position: absolute;
-          left: 0;
-          top: 0;
-          width: 100%;
-          height: 100%;
-          background: white;
-          color: black;
+        .glass {
+            background: rgba(15, 23, 42, 0.4);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
         }
-      }
+        .glass-hover:hover {
+            background: rgba(30, 41, 59, 0.6);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            transform: translateY(-2px);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .btn-glow:hover {
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.4);
+        }
+        /* Custom Scrollbar for Pro Look */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
+        
+        @keyframes subtle-float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+        .animate-float {
+            animation: subtle-float 6s infinite ease-in-out;
+        }
     </style>
 
 <link rel="stylesheet" href="/index.css">
-  <script type="importmap">
+<script type="importmap">
 {
   "imports": {
-    "react": "https://aistudiocdn.com/react@^19.2.1",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.1/",
-    "react/": "https://aistudiocdn.com/react@^19.2.1/",
-    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.556.0",
-    "react-router-dom": "https://aistudiocdn.com/react-router-dom@^6.22.3",
-    "@supabase/supabase-js": "https://aistudiocdn.com/@supabase/supabase-js@^2.86.2",
-    "vite": "https://aistudiocdn.com/vite@^7.2.6",
-    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.1",
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.31.0"
+    "@google/genai": "https://esm.sh/@google/genai@^1.34.0",
+    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3",
+    "react-router-dom": "https://esm.sh/react-router-dom@^7.11.0",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/"
   }
 }
 </script>
-  <script type="module" crossorigin src="./assets/index-Cz-7KkC-.js"></script>
+  <script type="module" crossorigin src="/assets/index-D_DcV9fT.js"></script>
 </head>
-  <body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white transition-colors duration-200">
+<body>
     <div id="root"></div>
 </body>
 </html>
